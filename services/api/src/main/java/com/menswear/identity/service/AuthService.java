@@ -16,6 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,12 +27,15 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 @Service
 public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
     private static final long RESET_TOKEN_HOURS = 1;
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+    private static final String GENERIC_LOGIN_FAILURE = "Incorrect email/mobile number or password";
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
@@ -63,11 +68,15 @@ public class AuthService {
         if (userRepository.existsByEmailIgnoreCase(request.email())) {
             throw new BadRequestException("Email already registered");
         }
+        String normalizedPhone = normalizePhone(request.phone());
+        if (normalizedPhone != null && userRepository.existsByPhone(normalizedPhone)) {
+            throw new BadRequestException("Mobile number already registered");
+        }
         User user = User.builder()
                 .email(request.email().trim().toLowerCase())
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .fullName(request.fullName().trim())
-                .phone(normalizePhone(request.phone()))
+                .phone(normalizedPhone)
                 .role(Role.CUSTOMER)
                 .enabled(true)
                 .build();
@@ -77,12 +86,39 @@ public class AuthService {
 
     @Transactional
     public AuthDtos.AuthResponse login(AuthDtos.LoginRequest request) {
-        var auth = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.email().trim().toLowerCase(), request.password())
-        );
+        String identifier = request.identifier().trim();
+        if (!isValidIdentifier(identifier)) {
+            throw new BadRequestException("Enter a valid email address or mobile number");
+        }
+        String lookupKey = isEmail(identifier) ? identifier.toLowerCase() : normalizePhone(identifier);
+
+        Authentication auth;
+        try {
+            auth = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(lookupKey, request.password())
+            );
+        } catch (AuthenticationException e) {
+            // Deliberately generic: don't reveal whether the identifier itself is registered.
+            throw new BadRequestException(GENERIC_LOGIN_FAILURE);
+        }
         UserPrincipal principal = (UserPrincipal) auth.getPrincipal();
         User user = userRepository.findById(principal.getId()).orElseThrow();
         return issueTokens(user);
+    }
+
+    private static boolean isEmail(String identifier) {
+        return identifier.contains("@");
+    }
+
+    private static boolean isValidIdentifier(String identifier) {
+        if (identifier.isEmpty()) {
+            return false;
+        }
+        if (isEmail(identifier)) {
+            return EMAIL_PATTERN.matcher(identifier).matches();
+        }
+        String digits = identifier.replaceAll("[^0-9]", "");
+        return digits.length() >= 7;
     }
 
     @Transactional

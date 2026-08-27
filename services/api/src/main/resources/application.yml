@@ -48,6 +48,11 @@ menswear:
   frontend:
     app-url: ${FRONTEND_APP_URL:http://localhost:3000}
     expose-reset-link: ${EXPOSE_RESET_LINK:true}
+  business:
+    name: ${BUSINESS_NAME:NJAY'S by S.A.R}
+    address: ${BUSINESS_ADDRESS:}
+    phone: ${BUSINESS_PHONE:${WHATSAPP_NUMBER:9233302611333}}
+    email: ${BUSINESS_EMAIL:}
   payments:
     bank:
       account-title: ${BANK_ACCOUNT_TITLE:Menswear Tailoring}

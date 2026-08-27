@@ -43,6 +43,16 @@ services:
       - key: EXPOSE_RESET_LINK
         value: "false"
 
+      # Shown on printed invoices — fill in with your real business details.
+      - key: BUSINESS_NAME
+        sync: false
+      - key: BUSINESS_ADDRESS
+        sync: false
+      - key: BUSINESS_PHONE
+        sync: false
+      - key: BUSINESS_EMAIL
+        sync: false
+
       - key: BANK_ACCOUNT_TITLE
         value: Menswear Tailoring
       - key: BANK_ACCOUNT_NUMBER

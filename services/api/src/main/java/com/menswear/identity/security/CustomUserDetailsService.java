@@ -17,8 +17,12 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        return userRepository.findByEmailIgnoreCase(username)
-                .map(UserPrincipal::new)
+        // Callers pass an already-normalized key: a lowercased email or a
+        // normalized phone (see AuthService.login) — never raw user input.
+        var user = username.contains("@")
+                ? userRepository.findByEmailIgnoreCase(username)
+                : userRepository.findByPhone(username);
+        return user.map(UserPrincipal::new)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
     }
 }

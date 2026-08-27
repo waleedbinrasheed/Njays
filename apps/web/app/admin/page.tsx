@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api, formatPkr } from "@/lib/api";
 import { AdminAssistant } from "@/components/AdminAssistant";
 
@@ -160,6 +161,9 @@ export default function AdminPage() {
                 ))}
               </select>
             </label>
+            <Link href={`/invoice/${o.id}`} className="link-subtle">
+              Print Invoice
+            </Link>
           </div>
         ))}
       </div>

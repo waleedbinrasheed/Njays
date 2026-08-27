@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api, formatPkr } from "@/lib/api";
 
 type Order = {
@@ -53,6 +54,9 @@ export default function OrdersPage() {
                 </li>
               ))}
             </ul>
+            <Link href={`/invoice/${o.id}`} className="link-subtle">
+              Print Invoice
+            </Link>
           </div>
         ))}
         {!loading && !error && orders.length === 0 && <p className="muted">No orders yet.</p>}
