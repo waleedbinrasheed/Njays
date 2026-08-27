@@ -1,0 +1,15 @@
+uploads/
+apps/web/node_modules/
+apps/web/.next/
+apps/web/.env.local
+services/api/.env
+services/api/target/
+target/
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.vscode/
+*.log
+.DS_Store

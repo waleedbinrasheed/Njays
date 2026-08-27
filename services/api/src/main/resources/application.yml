@@ -1,0 +1,76 @@
+spring:
+  application:
+    name: menswear-api
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/menswear}
+    username: ${DB_USER:menswear}
+    password: ${DB_PASSWORD:menswear}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 50MB
+
+server:
+  port: ${PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+menswear:
+  jwt:
+    secret: ${JWT_SECRET:change-me-to-a-very-long-secret-key-at-least-256-bits-long!!}
+    access-token-minutes: 120
+    refresh-token-days: 14
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
+  whatsapp:
+    number: ${WHATSAPP_NUMBER:9233302611333}
+  upload:
+    dir: ${UPLOAD_DIR:uploads}
+    public-base-url: ${UPLOAD_PUBLIC_BASE_URL:http://localhost:8080/media}
+  frontend:
+    app-url: ${FRONTEND_APP_URL:http://localhost:3000}
+    expose-reset-link: ${EXPOSE_RESET_LINK:true}
+  payments:
+    bank:
+      account-title: ${BANK_ACCOUNT_TITLE:Menswear Tailoring}
+      account-number: ${BANK_ACCOUNT_NUMBER:0123456789}
+      bank-name: ${BANK_NAME:HBL}
+      iban: ${BANK_IBAN:PK00HABB0000000123456789}
+    jazzcash:
+      merchant-id: ${JAZZCASH_MERCHANT_ID:MC12345}
+      password: ${JAZZCASH_PASSWORD:zaraa123}
+      integrity-salt: ${JAZZCASH_INTEGRITY_SALT:sandboxsalt}
+      # JazzCash POSTs here (API). Handler verifies hash then redirects to the storefront.
+      return-url: ${JAZZCASH_RETURN_URL:http://localhost:8080/api/v1/payments/webhooks/jazzcash}
+      frontend-return-url: ${JAZZCASH_FRONTEND_RETURN_URL:http://localhost:3000/checkout/jazzcash/return}
+      sandbox: ${JAZZCASH_SANDBOX:true}
+      require-secure-hash: ${JAZZCASH_REQUIRE_HASH:true}
+  currency: PKR
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    com.menswear: INFO

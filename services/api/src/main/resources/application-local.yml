@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:menswear;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+
+menswear:
+  jwt:
+    secret: local-dev-secret-key-change-in-production-256bits-minimum!!

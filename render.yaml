@@ -1,0 +1,85 @@
+databases:
+  - name: menswear-db
+    plan: free
+    region: singapore
+    databaseName: menswear
+    user: menswear
+
+services:
+  # ---- Backend: Spring Boot API (Docker) ----
+  - type: web
+    name: menswear-api
+    runtime: docker
+    plan: free
+    region: singapore
+    rootDir: services/api
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /actuator/health
+    envVars:
+      # Fill in after the menswear-db database is created — see the "Postgres" step
+      # in the deploy walkthrough for exactly what to paste here.
+      - key: DB_URL
+        sync: false
+      - key: DB_USER
+        fromDatabase:
+          name: menswear-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: menswear-db
+          property: password
+
+      - key: JWT_SECRET
+        generateValue: true
+
+      # Fill in with https://<menswear-web's-actual-onrender-url> once the web
+      # service exists (see walkthrough step "Wire the two services together").
+      - key: FRONTEND_APP_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+
+      - key: EXPOSE_RESET_LINK
+        value: "false"
+
+      - key: BANK_ACCOUNT_TITLE
+        value: Menswear Tailoring
+      - key: BANK_ACCOUNT_NUMBER
+        value: "0123456789"
+      - key: BANK_NAME
+        value: HBL
+      - key: BANK_IBAN
+        value: PK00HABB0000000123456789
+
+      # Real JazzCash production credentials — never commit these, set in dashboard.
+      - key: JAZZCASH_MERCHANT_ID
+        sync: false
+      - key: JAZZCASH_PASSWORD
+        sync: false
+      - key: JAZZCASH_INTEGRITY_SALT
+        sync: false
+      - key: JAZZCASH_SANDBOX
+        value: "true"
+      - key: JAZZCASH_REQUIRE_HASH
+        value: "true"
+      # https://<menswear-api's-actual-onrender-url>/api/v1/payments/webhooks/jazzcash
+      - key: JAZZCASH_RETURN_URL
+        sync: false
+      # https://<menswear-web's-actual-onrender-url>/checkout/jazzcash/return
+      - key: JAZZCASH_FRONTEND_RETURN_URL
+        sync: false
+
+  # ---- Frontend: Next.js storefront (native Node runtime, no Docker needed) ----
+  - type: web
+    name: menswear-web
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: apps/web
+    buildCommand: npm install && npm run build
+    startCommand: npm run start -- -p $PORT
+    envVars:
+      # https://<menswear-api's-actual-onrender-url>
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
