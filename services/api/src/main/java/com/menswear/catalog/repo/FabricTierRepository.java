@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface FabricTierRepository extends JpaRepository<FabricTier, Long> {
     List<FabricTier> findAllByOrderBySortOrderAsc();
+    boolean existsByCodeIgnoreCase(String code);
 }

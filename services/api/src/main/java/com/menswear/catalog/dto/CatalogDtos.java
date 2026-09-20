@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PositiveOrZero;
 
 import java.util.List;
 
@@ -51,5 +52,18 @@ public class CatalogDtos {
             Boolean supportsCustom,
             Boolean active,
             @NotEmpty @Valid List<ProductImageRequest> images
+    ) {}
+
+    public record CreateFabricTierRequest(
+            @NotBlank String code,
+            @NotBlank String name,
+            @NotNull @PositiveOrZero Long surchargePaisa,
+            Integer sortOrder
+    ) {}
+
+    public record CreateFabricColorRequest(
+            @NotBlank String code,
+            @NotBlank String name,
+            String hexColor
     ) {}
 }

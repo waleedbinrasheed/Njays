@@ -1,8 +1,10 @@
 package com.menswear.orders.web;
 
 import com.menswear.identity.security.SecurityUtils;
+import com.menswear.orders.dto.AdminOrderDtos;
 import com.menswear.orders.dto.InvoiceDtos;
 import com.menswear.orders.dto.OrderDtos;
+import com.menswear.orders.service.AdminOrderService;
 import com.menswear.orders.service.InvoiceService;
 import com.menswear.orders.service.OrderService;
 import jakarta.validation.Valid;
@@ -16,10 +18,12 @@ public class OrderController {
 
     private final OrderService orderService;
     private final InvoiceService invoiceService;
+    private final AdminOrderService adminOrderService;
 
-    public OrderController(OrderService orderService, InvoiceService invoiceService) {
+    public OrderController(OrderService orderService, InvoiceService invoiceService, AdminOrderService adminOrderService) {
         this.orderService = orderService;
         this.invoiceService = invoiceService;
+        this.adminOrderService = adminOrderService;
     }
 
     @PostMapping("/orders")
@@ -58,6 +62,11 @@ public class OrderController {
     @GetMapping("/admin/orders")
     public List<OrderDtos.OrderResponse> adminList() {
         return orderService.adminList();
+    }
+
+    @PostMapping("/admin/orders")
+    public OrderDtos.OrderResponse createWalkInOrder(@Valid @RequestBody AdminOrderDtos.CreateOrderRequest request) {
+        return adminOrderService.createWalkInOrder(request);
     }
 
     @PatchMapping("/admin/orders/{id}/status")

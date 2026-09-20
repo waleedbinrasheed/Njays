@@ -6,6 +6,7 @@ import com.menswear.catalog.entity.FabricTier;
 import com.menswear.catalog.entity.Product;
 import com.menswear.catalog.entity.ProductImage;
 import com.menswear.catalog.repo.CategoryRepository;
+import com.menswear.catalog.repo.FabricColorRepository;
 import com.menswear.catalog.repo.FabricTierRepository;
 import com.menswear.catalog.repo.ProductRepository;
 import com.menswear.common.exception.BadRequestException;
@@ -22,17 +23,20 @@ public class CatalogService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final FabricTierRepository fabricTierRepository;
+    private final FabricColorRepository fabricColorRepository;
     private final FileStorageService fileStorageService;
 
     public CatalogService(
             ProductRepository productRepository,
             CategoryRepository categoryRepository,
             FabricTierRepository fabricTierRepository,
+            FabricColorRepository fabricColorRepository,
             FileStorageService fileStorageService
     ) {
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.fabricTierRepository = fabricTierRepository;
+        this.fabricColorRepository = fabricColorRepository;
         this.fileStorageService = fileStorageService;
     }
 
@@ -170,6 +174,46 @@ public class CatalogService {
         }
 
         return toProduct(productRepository.save(product));
+    }
+
+    @Transactional
+    public CatalogDtos.FabricTierResponse createFabricTier(CatalogDtos.CreateFabricTierRequest request) {
+        String code = request.code().trim();
+        if (fabricTierRepository.existsByCodeIgnoreCase(code)) {
+            throw new BadRequestException("Fabric tier code already exists: " + code);
+        }
+        FabricTier tier = FabricTier.builder()
+                .code(code)
+                .name(request.name().trim())
+                .surchargePaisa(request.surchargePaisa())
+                .sortOrder(request.sortOrder() == null ? 0 : request.sortOrder())
+                .build();
+        return toTier(fabricTierRepository.save(tier));
+    }
+
+    @Transactional
+    public CatalogDtos.FabricColorResponse createFabricColor(Long tierId, CatalogDtos.CreateFabricColorRequest request) {
+        FabricTier tier = fabricTierRepository.findById(tierId)
+                .orElseThrow(() -> new NotFoundException("Fabric tier not found"));
+        String code = request.code().trim();
+        if (fabricColorRepository.existsByFabricTierIdAndCodeIgnoreCase(tierId, code)) {
+            throw new BadRequestException("This tier already has a color with code: " + code);
+        }
+        FabricColor color = FabricColor.builder()
+                .fabricTier(tier)
+                .code(code)
+                .name(request.name().trim())
+                .hexColor(normalizeHex(request.hexColor()))
+                .build();
+        return toColor(fabricColorRepository.save(color));
+    }
+
+    private String normalizeHex(String hex) {
+        if (hex == null || hex.isBlank()) {
+            return null;
+        }
+        String trimmed = hex.trim();
+        return trimmed.startsWith("#") ? trimmed : "#" + trimmed;
     }
 
     private String slugify(String raw) {

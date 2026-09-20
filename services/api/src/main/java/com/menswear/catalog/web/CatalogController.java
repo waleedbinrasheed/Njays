@@ -48,6 +48,19 @@ public class CatalogController {
         return catalogService.createProduct(request);
     }
 
+    @PostMapping("/admin/fabrics/tiers")
+    public CatalogDtos.FabricTierResponse createFabricTier(@Valid @RequestBody CatalogDtos.CreateFabricTierRequest request) {
+        return catalogService.createFabricTier(request);
+    }
+
+    @PostMapping("/admin/fabrics/tiers/{tierId}/colors")
+    public CatalogDtos.FabricColorResponse createFabricColor(
+            @PathVariable Long tierId,
+            @Valid @RequestBody CatalogDtos.CreateFabricColorRequest request
+    ) {
+        return catalogService.createFabricColor(tierId, request);
+    }
+
     @PostMapping(value = "/admin/products", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public CatalogDtos.ProductResponse createProductMultipart(
             @RequestParam String name,

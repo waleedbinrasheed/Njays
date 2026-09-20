@@ -16,6 +16,7 @@ import com.menswear.identity.service.AuthService;
 import com.menswear.identity.security.SecurityUtils;
 import com.menswear.measurements.entity.MeasurementProfile;
 import com.menswear.measurements.repo.MeasurementProfileRepository;
+import com.menswear.orders.dto.AdminOrderDtos;
 import com.menswear.orders.dto.OrderDtos;
 import com.menswear.orders.entity.OrderItem;
 import com.menswear.orders.entity.OrderStatusHistory;
@@ -195,6 +196,89 @@ public class OrderService {
                 .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
                 .map(this::toDto)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public OrderDtos.OrderResponse adminGet(Long id) {
+        return toDto(orderRepository.findById(id).orElseThrow(() -> new NotFoundException("Order not found")));
+    }
+
+    /**
+     * In-shop point-of-sale order creation. Bypasses the cart entirely — items
+     * are supplied directly — since the admin is acting on behalf of a walk-in
+     * customer, not the currently authenticated user. Caller is responsible
+     * for having already verified customerId refers to a real customer.
+     */
+    @Transactional
+    public OrderDtos.OrderResponse createForCustomer(Long customerId, AdminOrderDtos.CreateOrderRequest request, Long actorId) {
+        boolean anyCustom = request.items().stream().anyMatch(AdminOrderDtos.CreateOrderItemRequest::custom);
+        OrderType type = anyCustom ? OrderType.CUSTOM : OrderType.READY;
+        OrderStatus initial = anyCustom ? OrderStatus.MEASUREMENT_SUBMITTED : OrderStatus.PAYMENT_PENDING;
+
+        long subtotal = 0;
+        ShopOrder order = ShopOrder.builder()
+                .publicCode(generateCode())
+                .userId(customerId)
+                .orderType(type)
+                .status(initial)
+                .currency("PKR")
+                .shippingPaisa(0L)
+                .shippingAddressJson(writeJson(request.shippingAddress()))
+                .whatsappPhone(AuthService.normalizePhone(request.whatsappPhone()))
+                .customerNote(request.customerNote())
+                .build();
+
+        for (AdminOrderDtos.CreateOrderItemRequest itemReq : request.items()) {
+            Product product = productRepository.findById(itemReq.productId())
+                    .filter(Product::isActive)
+                    .orElseThrow(() -> new NotFoundException("Product not found"));
+
+            long unitPrice = product.getBasePricePaisa();
+            String fabricLabel = null;
+            String measurementJson = null;
+            if (itemReq.custom()) {
+                if (!product.isSupportsCustom()) {
+                    throw new BadRequestException("Product does not support custom measure: " + product.getName());
+                }
+                if (itemReq.fabricColorId() == null || itemReq.measurementProfileId() == null) {
+                    throw new BadRequestException("Custom items require a fabric color and a measurement profile");
+                }
+                FabricColor color = fabricColorRepository.findById(itemReq.fabricColorId())
+                        .orElseThrow(() -> new NotFoundException("Fabric color not found"));
+                unitPrice += color.getFabricTier().getSurchargePaisa();
+                fabricLabel = color.getFabricTier().getName() + " / " + color.getName() + " (" + color.getCode() + ")";
+                MeasurementProfile profile = measurementProfileRepository
+                        .findByIdAndUserId(itemReq.measurementProfileId(), customerId)
+                        .orElseThrow(() -> new NotFoundException("Measurement profile not found for this customer"));
+                measurementJson = writeJson(profile);
+            }
+
+            long line = unitPrice * itemReq.quantity();
+            subtotal += line;
+            OrderItem item = OrderItem.builder()
+                    .order(order)
+                    .productId(product.getId())
+                    .productName(product.getName())
+                    .quantity(itemReq.quantity())
+                    .custom(itemReq.custom())
+                    .fabricColorId(itemReq.fabricColorId())
+                    .fabricLabel(fabricLabel)
+                    .measurementJson(measurementJson)
+                    .unitPricePaisa(unitPrice)
+                    .lineTotalPaisa(line)
+                    .build();
+            order.getItems().add(item);
+        }
+
+        order.setSubtotalPaisa(subtotal);
+        order.setTotalPaisa(subtotal);
+        appendHistory(order, null, initial, "Order created in-store by staff", actorId);
+        if (anyCustom) {
+            appendHistory(order, initial, OrderStatus.PAYMENT_PENDING, "Awaiting payment", actorId);
+            order.setStatus(OrderStatus.PAYMENT_PENDING);
+        }
+
+        return toDto(orderRepository.save(order));
     }
 
     private void appendHistory(ShopOrder order, OrderStatus from, OrderStatus to, String note, Long actorId) {

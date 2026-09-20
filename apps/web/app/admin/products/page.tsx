@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, apiForm, formatPkr } from "@/lib/api";
+import { AdminNav } from "@/components/AdminNav";
 
 type Category = { id: number; name: string; slug: string };
 
@@ -122,6 +123,7 @@ export default function AdminProductsPage() {
 
   return (
     <section className="container section">
+      <AdminNav />
       <div className="page-header" style={{ maxWidth: 760 }}>
         <span className="section-label">Studio</span>
         <h2>Add dress</h2>

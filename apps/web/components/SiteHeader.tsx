@@ -138,14 +138,9 @@ export function SiteHeader() {
             </Link>
           )}
           {isAdmin && (
-            <>
-              <Link href="/admin" className={navClass("/admin")} onClick={() => setMenuOpen(false)}>
-                Admin
-              </Link>
-              <Link href="/admin/products" className={navClass("/admin/products")} onClick={() => setMenuOpen(false)}>
-                Add dress
-              </Link>
-            </>
+            <Link href="/admin" className={navClass("/admin")} onClick={() => setMenuOpen(false)}>
+              Admin
+            </Link>
           )}
           {showLoggedIn ? (
             <>

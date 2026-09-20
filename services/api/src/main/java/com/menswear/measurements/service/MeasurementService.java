@@ -27,7 +27,17 @@ public class MeasurementService {
 
     @Transactional
     public MeasurementDtos.Response create(MeasurementDtos.UpsertRequest request) {
-        Long userId = SecurityUtils.currentUserId();
+        return createForUser(SecurityUtils.currentUserId(), request);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MeasurementDtos.Response> listForUser(Long userId) {
+        return repository.findByUserIdOrderByUpdatedAtDesc(userId).stream().map(this::toDto).toList();
+    }
+
+    /** Admin-facing: creates a profile for an arbitrary customer (in-shop order intake). */
+    @Transactional
+    public MeasurementDtos.Response createForUser(Long userId, MeasurementDtos.UpsertRequest request) {
         if (Boolean.TRUE.equals(request.isDefault())) {
             clearDefaults(userId);
         }

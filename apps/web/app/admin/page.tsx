@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api, formatPkr } from "@/lib/api";
 import { AdminAssistant } from "@/components/AdminAssistant";
+import { AdminNav } from "@/components/AdminNav";
 
 type Order = {
   id: number;
@@ -86,15 +87,16 @@ export default function AdminPage() {
 
   return (
     <section className="container section">
+      <AdminNav />
       <div className="page-header">
         <span className="section-label">Studio</span>
         <h2>Admin</h2>
         <p className="lead">
-          Sign in as admin@menswear.local / Admin@12345 — manage orders or{" "}
-          <a href="/admin/products" className="link-subtle">
-            add a new dress
-          </a>
-          .
+          Sign in as admin@menswear.local / Admin@12345 — manage orders, or use{" "}
+          <a href="/admin/orders/new" className="link-subtle">
+            Create Order
+          </a>{" "}
+          for a walk-in client.
         </p>
       </div>
 

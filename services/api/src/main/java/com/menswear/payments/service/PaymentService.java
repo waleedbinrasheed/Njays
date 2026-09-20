@@ -98,10 +98,16 @@ public class PaymentService {
             paymentRepository.save(open);
         }
 
+        if (request.method() == PaymentMethod.CASH) {
+            // Cash is only ever created directly by the admin order-intake flow
+            // (already-settled at the point of sale), never through this endpoint.
+            throw new BadRequestException("Cash is not a selectable online payment method");
+        }
         PaymentStatus status = switch (request.method()) {
             case COD -> PaymentStatus.PENDING;
             case BANK_TRANSFER -> PaymentStatus.AWAITING_CONFIRMATION;
             case JAZZCASH -> PaymentStatus.PENDING;
+            case CASH -> throw new IllegalStateException("unreachable");
         };
 
         Instant expiresAt = request.method() == PaymentMethod.JAZZCASH

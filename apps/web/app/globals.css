@@ -1234,6 +1234,170 @@ main .btn-ghost:hover:not(:disabled) {
   }
 }
 
+/* ——— Admin nav ——— */
+.admin-nav {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0.25rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-nav-tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0.6rem 1.15rem;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--muted);
+  border-bottom: 3px solid transparent;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.admin-nav-tab:hover {
+  color: var(--teal);
+  background: rgba(0, 91, 130, 0.06);
+}
+
+.admin-nav-tab.active {
+  color: var(--teal-deep);
+  border-bottom-color: var(--forest);
+  background: rgba(0, 91, 130, 0.08);
+}
+
+/* ——— Admin / tablet POS tuning ——— */
+.pos-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.pos-step {
+  margin-bottom: 1.5rem;
+}
+
+.pos-step-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  color: var(--teal-deep);
+  margin: 0 0 0.85rem;
+}
+
+.pos-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--teal);
+  color: #fff;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.pos-customer-result {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.9rem 1rem;
+  min-height: 56px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.pos-customer-result:hover {
+  border-color: var(--steel);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.pos-customer-result.selected {
+  border-color: var(--forest);
+  background: rgba(0, 92, 59, 0.07);
+}
+
+.pos-measure-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.pos-measure-grid label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.pos-measure-grid input,
+.pos-measure-grid select {
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.7rem;
+  font-size: 1rem;
+  background: var(--surface-solid);
+}
+
+.pos-cart-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.pos-cart-row:last-child {
+  border-bottom: none;
+}
+
+.swatch {
+  display: inline-block;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  vertical-align: middle;
+  margin-right: 0.4rem;
+}
+
+.fabric-color-card {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.4rem 0.8rem 0.4rem 0.4rem;
+  background: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 860px) {
+  .pos-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ——— Admin assistant ——— */
 .assistant-panel {
   margin-bottom: 2rem;

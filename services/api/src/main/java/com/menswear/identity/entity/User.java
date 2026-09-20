@@ -19,7 +19,8 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    /** Nullable: admin-created walk-in customers may not have one. */
+    @Column(unique = true)
     private String email;
 
     @Column(name = "password_hash", nullable = false)
