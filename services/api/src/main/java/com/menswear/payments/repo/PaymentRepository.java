@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -50,4 +51,8 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             @Param("keepId") Long keepId,
             @Param("reason") String reason
     );
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update Payment p set p.createdAt = :date, p.updatedAt = :date, p.confirmedAt = :date where p.id = :id")
+    void backdate(@Param("id") Long id, @Param("date") Instant date);
 }

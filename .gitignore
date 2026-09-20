@@ -1,4 +1,6 @@
 uploads/
+# Real customer data — never commit this (see services/api/scripts/README.md)
+services/api/scripts/legacy_import_payload.json
 apps/web/node_modules/
 apps/web/.next/
 apps/web/.env.local

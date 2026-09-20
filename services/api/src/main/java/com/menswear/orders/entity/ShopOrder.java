@@ -57,6 +57,10 @@ public class ShopOrder {
     @Column(name = "customer_note", columnDefinition = "TEXT")
     private String customerNote;
 
+    /** Set only for orders backfilled from the legacy ledger import; null otherwise. */
+    @Column(name = "legacy_ref", unique = true)
+    private String legacyRef;
+
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<OrderItem> items = new ArrayList<>();

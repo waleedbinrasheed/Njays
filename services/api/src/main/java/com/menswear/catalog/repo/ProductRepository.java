@@ -11,6 +11,8 @@ import java.util.Optional;
 public interface ProductRepository extends JpaRepository<Product, Long> {
     Optional<Product> findBySlugAndActiveTrue(String slug);
 
+    Optional<Product> findBySlug(String slug);
+
     boolean existsBySlugIgnoreCase(String slug);
 
     List<Product> findByActiveTrueOrderByCreatedAtDesc();
