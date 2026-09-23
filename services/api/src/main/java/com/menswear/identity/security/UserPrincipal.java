@@ -13,16 +13,20 @@ import java.util.List;
 public class UserPrincipal implements UserDetails {
 
     private final Long id;
+    private final String fullName;
     private final String email;
     private final String password;
     private final String role;
+    private final Long branchId;
     private final boolean enabled;
 
     public UserPrincipal(User user) {
         this.id = user.getId();
+        this.fullName = user.getFullName();
         this.email = user.getEmail();
         this.password = user.getPasswordHash();
         this.role = user.getRole().name();
+        this.branchId = user.getBranchId();
         this.enabled = user.isEnabled();
     }
 

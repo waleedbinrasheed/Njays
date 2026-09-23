@@ -7,7 +7,6 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 @SpringBootApplication
 @ConfigurationPropertiesScan
 public class MenswearApplication {
-
     public static void main(String[] args) {
         SpringApplication.run(MenswearApplication.class, args);
     }

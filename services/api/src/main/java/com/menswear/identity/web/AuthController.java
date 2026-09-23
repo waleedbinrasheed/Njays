@@ -2,6 +2,8 @@ package com.menswear.identity.web;
 
 import com.menswear.identity.dto.AuthDtos;
 import com.menswear.identity.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,27 +18,31 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public AuthDtos.AuthResponse register(@Valid @RequestBody AuthDtos.RegisterRequest request) {
-        return authService.register(request);
+    public AuthDtos.MeResponse register(
+            @Valid @RequestBody AuthDtos.RegisterRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse
+    ) {
+        return authService.register(request, httpRequest, httpResponse);
     }
 
     @PostMapping("/login")
-    public AuthDtos.AuthResponse login(@Valid @RequestBody AuthDtos.LoginRequest request) {
-        return authService.login(request);
+    public AuthDtos.MeResponse login(
+            @Valid @RequestBody AuthDtos.LoginRequest request,
+            HttpServletRequest httpRequest,
+            HttpServletResponse httpResponse
+    ) {
+        return authService.login(request, httpRequest, httpResponse);
     }
 
-    @PostMapping("/refresh")
-    public AuthDtos.AuthResponse refresh(@Valid @RequestBody AuthDtos.RefreshRequest request) {
-        return authService.refresh(request);
+    @PostMapping("/logout")
+    public AuthDtos.MessageResponse logout(HttpServletRequest request) {
+        authService.logout(request);
+        return new AuthDtos.MessageResponse("Signed out.");
     }
 
-    @PostMapping("/forgot-password")
-    public AuthDtos.ForgotPasswordResponse forgotPassword(@Valid @RequestBody AuthDtos.ForgotPasswordRequest request) {
-        return authService.forgotPassword(request);
-    }
-
-    @PostMapping("/reset-password")
-    public AuthDtos.MessageResponse resetPassword(@Valid @RequestBody AuthDtos.ResetPasswordRequest request) {
-        return authService.resetPassword(request);
+    @GetMapping("/me")
+    public AuthDtos.MeResponse me() {
+        return authService.me();
     }
 }

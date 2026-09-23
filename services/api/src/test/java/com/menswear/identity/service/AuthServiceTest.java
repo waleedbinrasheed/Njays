@@ -1,190 +1,160 @@
 package com.menswear.identity.service;
 
+import com.menswear.branch.repo.BranchRepository;
 import com.menswear.common.enums.Role;
 import com.menswear.common.exception.BadRequestException;
-import com.menswear.config.MenswearProperties;
 import com.menswear.identity.dto.AuthDtos;
 import com.menswear.identity.entity.User;
-import com.menswear.identity.repo.PasswordResetTokenRepository;
-import com.menswear.identity.repo.RefreshTokenRepository;
 import com.menswear.identity.repo.UserRepository;
-import com.menswear.identity.security.JwtService;
+import com.menswear.identity.security.SecurityUtils;
 import com.menswear.identity.security.UserPrincipal;
-import org.junit.jupiter.api.BeforeEach;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockedStatic;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.context.SecurityContextRepository;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
 
+@ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
 
-    private final UserRepository userRepository = mock(UserRepository.class);
-    private final RefreshTokenRepository refreshTokenRepository = mock(RefreshTokenRepository.class);
-    private final PasswordResetTokenRepository passwordResetTokenRepository = mock(PasswordResetTokenRepository.class);
-    private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
-    private final JwtService jwtService = mock(JwtService.class);
-    private final AuthenticationManager authenticationManager = mock(AuthenticationManager.class);
-    private final MenswearProperties properties = new MenswearProperties(
-            new MenswearProperties.Jwt("secret", 120, 14),
-            new MenswearProperties.Cors(List.of("http://localhost:3000")),
-            new MenswearProperties.Whatsapp("923001234567"),
-            new MenswearProperties.Payments(
-                    new MenswearProperties.Bank("Title", "Acct", "Bank", "IBAN"),
-                    new MenswearProperties.Jazzcash("MID", "PW", "SALT", "return", "frontendReturn", true, true)
-            ),
-            new MenswearProperties.Frontend("http://localhost:3000", true),
-            new MenswearProperties.Business("NJAY'S by S.A.R", "Address", "+923001234567", "hi@example.com"),
-            "PKR"
-    );
+    @Mock
+    private UserRepository userRepository;
+    @Mock
+    private BranchRepository branchRepository;
+    @Mock
+    private PasswordEncoder passwordEncoder;
+    @Mock
+    private AuthenticationManager authenticationManager;
+    @Mock
+    private SecurityContextRepository securityContextRepository;
+    @Mock
+    private HttpServletRequest httpRequest;
+    @Mock
+    private HttpServletResponse httpResponse;
 
-    private AuthService service;
+    @InjectMocks
+    private AuthService authService;
 
-    @BeforeEach
-    void setUp() {
-        service = new AuthService(
-                userRepository, refreshTokenRepository, passwordResetTokenRepository,
-                passwordEncoder, jwtService, authenticationManager, properties
-        );
+    private Authentication authenticationFor(User user) {
+        UserPrincipal principal = new UserPrincipal(user);
+        return new UsernamePasswordAuthenticationToken(principal, null, List.of());
     }
-
-    private User sampleUser() {
-        return User.builder()
-                .id(1L)
-                .email("user@example.com")
-                .passwordHash("hash")
-                .fullName("Test User")
-                .phone("923001234567")
-                .role(Role.CUSTOMER)
-                .enabled(true)
-                .build();
-    }
-
-    // ---- register: duplicate phone (the new DB constraint's application-level twin) ----
 
     @Test
-    void registerRejectsDuplicatePhone() {
-        var request = new AuthDtos.RegisterRequest("new@example.com", "Password1", "New User", "03001234567");
-        when(userRepository.existsByEmailIgnoreCase("new@example.com")).thenReturn(false);
-        when(userRepository.existsByPhone("923001234567")).thenReturn(true);
+    void register_createsUserAndEstablishesSession() {
+        var request = new AuthDtos.RegisterRequest("Jane Doe", "Jane@Example.com", "password123", null);
+        when(userRepository.existsByEmailIgnoreCase("jane@example.com")).thenReturn(false);
+        when(passwordEncoder.encode("password123")).thenReturn("hashed");
+        User saved = User.builder().id(5L).fullName("Jane Doe").email("jane@example.com")
+                .passwordHash("hashed").role(Role.USER).enabled(true).build();
+        when(authenticationManager.authenticate(any())).thenReturn(authenticationFor(saved));
 
-        assertThatThrownBy(() -> service.register(request))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Mobile number already registered");
+        AuthDtos.MeResponse response = authService.register(request, httpRequest, httpResponse);
+
+        assertThat(response.email()).isEqualTo("jane@example.com");
+        assertThat(response.role()).isEqualTo("USER");
+        verify(userRepository).save(any(User.class));
+        verify(branchRepository, never()).existsById(any());
+        verify(securityContextRepository).saveContext(any(), eq(httpRequest), eq(httpResponse));
+    }
+
+    @Test
+    void register_rejectsDuplicateEmail() {
+        when(userRepository.existsByEmailIgnoreCase("jane@example.com")).thenReturn(true);
+        var request = new AuthDtos.RegisterRequest("Jane Doe", "jane@example.com", "password123", null);
+
+        assertThatThrownBy(() -> authService.register(request, httpRequest, httpResponse))
+                .isInstanceOf(BadRequestException.class);
 
         verify(userRepository, never()).save(any());
     }
 
     @Test
-    void registerSkipsPhoneCheckWhenPhoneOmitted() {
-        var request = new AuthDtos.RegisterRequest("new@example.com", "Password1", "New User", null);
-        when(userRepository.existsByEmailIgnoreCase("new@example.com")).thenReturn(false);
-        when(passwordEncoder.encode("Password1")).thenReturn("hashed");
-        when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(jwtService.createAccessToken(any(), any(), any())).thenReturn("access-token");
+    void register_rejectsUnknownBranch() {
+        when(userRepository.existsByEmailIgnoreCase("jane@example.com")).thenReturn(false);
+        when(branchRepository.existsById(42L)).thenReturn(false);
+        var request = new AuthDtos.RegisterRequest("Jane Doe", "jane@example.com", "password123", 42L);
 
-        service.register(request);
+        assertThatThrownBy(() -> authService.register(request, httpRequest, httpResponse))
+                .isInstanceOf(BadRequestException.class);
 
-        verify(userRepository, never()).existsByPhone(any());
+        verify(userRepository, never()).save(any());
     }
 
-    // ---- login: identifier validation ----
+    @Test
+    void login_establishesSessionOnValidCredentials() {
+        User user = User.builder().id(1L).fullName("Jane Doe").email("jane@example.com")
+                .passwordHash("hashed").role(Role.ADMIN).branchId(3L).enabled(true).build();
+        when(authenticationManager.authenticate(any())).thenReturn(authenticationFor(user));
+        var request = new AuthDtos.LoginRequest("jane@example.com", "password123");
+
+        AuthDtos.MeResponse response = authService.login(request, httpRequest, httpResponse);
+
+        assertThat(response.id()).isEqualTo(1L);
+        assertThat(response.role()).isEqualTo("ADMIN");
+        assertThat(response.branchId()).isEqualTo(3L);
+        verify(securityContextRepository).saveContext(any(), eq(httpRequest), eq(httpResponse));
+    }
 
     @Test
-    void loginRejectsGarbageIdentifier() {
-        var request = new AuthDtos.LoginRequest("ab", "password123");
-        assertThatThrownBy(() -> service.login(request))
+    void login_wrapsAuthenticationFailureAsGenericBadRequest() {
+        when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("bad credentials"));
+        var request = new AuthDtos.LoginRequest("jane@example.com", "wrong-password");
+
+        assertThatThrownBy(() -> authService.login(request, httpRequest, httpResponse))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("valid email address or mobile number");
-        verifyNoInteractions(authenticationManager);
+                .hasMessage("Incorrect email or password");
+
+        verify(securityContextRepository, never()).saveContext(any(), any(), any());
     }
 
     @Test
-    void loginRejectsMalformedEmail() {
-        var request = new AuthDtos.LoginRequest("not-an-email@", "password123");
-        assertThatThrownBy(() -> service.login(request))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("valid email address or mobile number");
-        verifyNoInteractions(authenticationManager);
-    }
+    void logout_invalidatesExistingSession() {
+        HttpSession session = mock(HttpSession.class);
+        when(httpRequest.getSession(false)).thenReturn(session);
 
-    // ---- login: identifier classification / normalization ----
+        authService.logout(httpRequest);
 
-    @Test
-    void loginWithEmailUsesLowercasedEmailAsLookupKey() {
-        stubSuccessfulAuth();
-
-        service.login(new AuthDtos.LoginRequest("User@Example.com", "password123"));
-
-        assertThat(capturedLookupKey()).isEqualTo("user@example.com");
+        verify(session).invalidate();
     }
 
     @Test
-    void loginWithPhoneNormalizesBeforeLookup() {
-        stubSuccessfulAuth();
+    void logout_isNoOpWhenNoSessionExists() {
+        when(httpRequest.getSession(false)).thenReturn(null);
 
-        service.login(new AuthDtos.LoginRequest("03001234567", "password123"));
-
-        assertThat(capturedLookupKey()).isEqualTo("923001234567");
-    }
-
-    // ---- login: generic failure message (no account-enumeration) ----
-
-    @Test
-    void loginFailureIsGenericRegardlessOfCause() {
-        when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("bad creds"));
-
-        assertThatThrownBy(() -> service.login(new AuthDtos.LoginRequest("user@example.com", "wrong")))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessage("Incorrect email/mobile number or password");
+        authService.logout(httpRequest);
     }
 
     @Test
-    void loginFailureMessageIsIdenticalForEmailAndPhoneIdentifiers() {
-        when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("bad creds"));
+    void me_returnsCurrentPrincipalFromSecurityContext() {
+        User user = User.builder().id(7L).fullName("Bob").email("bob@example.com")
+                .passwordHash("h").role(Role.ADMIN).enabled(true).build();
+        try (MockedStatic<SecurityUtils> mockedStatic = mockStatic(SecurityUtils.class)) {
+            mockedStatic.when(SecurityUtils::currentUser).thenReturn(new UserPrincipal(user));
 
-        String emailFailure = catchMessage(() -> service.login(new AuthDtos.LoginRequest("user@example.com", "wrong")));
-        String phoneFailure = catchMessage(() -> service.login(new AuthDtos.LoginRequest("03001234567", "wrong")));
+            AuthDtos.MeResponse response = authService.me();
 
-        assertThat(emailFailure).isEqualTo(phoneFailure);
-    }
-
-    private void stubSuccessfulAuth() {
-        User user = sampleUser();
-        UserPrincipal principal = new UserPrincipal(user);
-        Authentication authResult = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
-        when(authenticationManager.authenticate(any())).thenReturn(authResult);
-        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(jwtService.createAccessToken(any(), any(), any())).thenReturn("access-token");
-    }
-
-    private String capturedLookupKey() {
-        ArgumentCaptor<UsernamePasswordAuthenticationToken> captor =
-                ArgumentCaptor.forClass(UsernamePasswordAuthenticationToken.class);
-        verify(authenticationManager).authenticate(captor.capture());
-        return String.valueOf(captor.getValue().getPrincipal());
-    }
-
-    private static String catchMessage(Runnable action) {
-        try {
-            action.run();
-            return null;
-        } catch (RuntimeException e) {
-            return e.getMessage();
+            assertThat(response.id()).isEqualTo(7L);
+            assertThat(response.email()).isEqualTo("bob@example.com");
+            assertThat(response.role()).isEqualTo("ADMIN");
         }
     }
 }
