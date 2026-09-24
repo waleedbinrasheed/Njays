@@ -1,6 +1,12 @@
 spring:
   application:
     name: menswear-api
+  # Render's free tier gives the app a short window to open its port before
+  # a deploy is marked as timed out. Lazy init lets Tomcat bind immediately,
+  # instead of waiting for the whole (slow, CPU-starved) Hibernate/JPA
+  # bootstrap to finish first.
+  main:
+    lazy-initialization: true
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/menswear}
     username: ${DB_USER:menswear}
