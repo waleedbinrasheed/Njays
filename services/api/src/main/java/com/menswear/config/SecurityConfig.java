@@ -50,11 +50,7 @@ public class SecurityConfig {
                                 "/api/v1/auth/refresh",
                                 "/api/v1/auth/logout",
                                 "/api/v1/branches",
-                                "/actuator/health",
-                                "/swagger-ui/**",
-                                "/swagger-ui.html",
-                                "/api-docs/**",
-                                "/v3/api-docs/**"
+                                "/actuator/health"
                         ).permitAll()
                         // /api/v1/auth/me is deliberately NOT permitAll: an anonymous call must get a
                         // clean 401 (via the entry point above), not fall through to the controller.
