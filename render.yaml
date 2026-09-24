@@ -30,22 +30,14 @@ services:
           name: menswear-db
           property: password
 
-      # Redis is required (server-side sessions). Create a Key Value instance in
-      # the Render dashboard first, then paste its Host/Port/Password here from
-      # its "Connect" tab.
-      - key: REDIS_HOST
-        sync: false
-      - key: REDIS_PORT
-        sync: false
-      - key: REDIS_PASSWORD
-        sync: false
-
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ACCESS_TOKEN_MINUTES
+        value: "15"
+      # How many minutes of inactivity before a user is signed out (sliding —
+      # extended each time the frontend refreshes the access token).
       - key: SESSION_TIMEOUT_MINUTES
         value: "30"
-      - key: COOKIE_SECURE
-        value: "true"
-      - key: COOKIE_SAME_SITE
-        value: lax
 
       # Fill in with https://<menswear-web's-actual-onrender-url> once the web
       # service exists (see walkthrough step "Wire the two services together").

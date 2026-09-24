@@ -1,8 +1,14 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, getAccessToken, getRefreshToken, storeTokens, clearTokens } from "@/lib/api";
 import type { MeResponse } from "@/lib/types";
+
+interface TokenResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: MeResponse;
+}
 
 interface AuthContextValue {
   user: MeResponse | null;
@@ -10,7 +16,6 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   register: (fullName: string, email: string, password: string, branchId: number | null) => Promise<void>;
   logout: () => Promise<void>;
-  refresh: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -19,53 +24,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(async () => {
-    try {
-      const me = await apiFetch<MeResponse>("/auth/me");
-      setUser(me);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
+  useEffect(() => {
+    async function init() {
+      if (!getAccessToken()) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const me = await apiFetch<MeResponse>("/auth/me");
+        setUser(me);
+      } catch (err) {
+        if (!(err instanceof ApiError)) console.error("Failed to load current session", err);
+        clearTokens();
         setUser(null);
-      } else {
-        throw err;
+      } finally {
+        setLoading(false);
       }
     }
+    init();
   }, []);
 
-  useEffect(() => {
-    refresh()
-      .catch((err) => console.error("Failed to load current session", err))
-      .finally(() => setLoading(false));
-  }, [refresh]);
-
   const login = useCallback(async (email: string, password: string) => {
-    const me = await apiFetch<MeResponse>("/auth/login", {
+    const res = await apiFetch<TokenResponse>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
-    setUser(me);
+    storeTokens(res.accessToken, res.refreshToken);
+    setUser(res.user);
   }, []);
 
   const register = useCallback(
     async (fullName: string, email: string, password: string, branchId: number | null) => {
-      const me = await apiFetch<MeResponse>("/auth/register", {
+      const res = await apiFetch<TokenResponse>("/auth/register", {
         method: "POST",
         body: JSON.stringify({ fullName, email, password, branchId }),
       });
-      setUser(me);
+      storeTokens(res.accessToken, res.refreshToken);
+      setUser(res.user);
     },
     []
   );
 
   const logout = useCallback(async () => {
-    await apiFetch("/auth/logout", { method: "POST" });
-    setUser(null);
+    const refreshToken = getRefreshToken();
+    try {
+      if (refreshToken) {
+        await apiFetch("/auth/logout", { method: "POST", body: JSON.stringify({ refreshToken }) });
+      }
+    } finally {
+      clearTokens();
+      setUser(null);
+    }
   }, []);
 
-  const value = useMemo(
-    () => ({ user, loading, login, register, logout, refresh }),
-    [user, loading, login, register, logout, refresh]
-  );
+  const value = useMemo(() => ({ user, loading, login, register, logout }), [user, loading, login, register, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

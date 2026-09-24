@@ -15,19 +15,6 @@ spring:
           time_zone: UTC
   flyway:
     enabled: true
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-  session:
-    store-type: redis
-    redis:
-      namespace: menswear:session
-    # This IS the configurable inactivity logout period — Spring Session's Redis
-    # store implements sliding expiration natively: every authenticated request
-    # touches the session and pushes its TTL back out by this amount.
-    timeout: ${SESSION_TIMEOUT_MINUTES:30}m
   servlet:
     multipart:
       max-file-size: 10MB
@@ -35,13 +22,16 @@ spring:
 
 server:
   port: ${PORT:8080}
-  servlet:
-    session:
-      cookie:
-        name: MENSWEAR_SESSION
-        http-only: true
-        secure: ${COOKIE_SECURE:false}
-        same-site: ${COOKIE_SAME_SITE:lax}
+
+jwt:
+  secret: ${JWT_SECRET:dev-only-secret-change-me-please-0123456789-ok}
+  access-token-minutes: ${ACCESS_TOKEN_MINUTES:15}
+  # The refresh token's sliding expiry — this IS the configurable inactivity
+  # logout period. It's extended by REFRESH_TOKEN_MINUTES every time the
+  # frontend calls /auth/refresh; if that stops happening (the user goes
+  # inactive) for longer than this window, the next refresh attempt fails
+  # and they're signed out.
+  refresh-token-minutes: ${SESSION_TIMEOUT_MINUTES:30}
 
 management:
   endpoints:

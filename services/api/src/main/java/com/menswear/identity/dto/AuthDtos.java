@@ -26,5 +26,13 @@ public class AuthDtos {
             Long branchId
     ) {}
 
+    public record TokenResponse(
+            String accessToken,
+            String refreshToken,
+            MeResponse user
+    ) {}
+
+    public record RefreshRequest(@NotBlank String refreshToken) {}
+
     public record MessageResponse(String message) {}
 }

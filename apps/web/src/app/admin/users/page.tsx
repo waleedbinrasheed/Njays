@@ -8,7 +8,7 @@ import type { UserSummary } from "@/lib/types";
 export default function AdminUsersPage() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<UserSummary[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState("");
 
   async function load() {
     const data = await apiFetch<UserSummary[]>("/admin/users");
@@ -20,7 +20,7 @@ export default function AdminUsersPage() {
   }, []);
 
   async function toggleEnabled(u: UserSummary) {
-    setError(null);
+    setError("");
     try {
       await apiFetch<UserSummary>(`/admin/users/${u.id}/enabled`, {
         method: "PATCH",
@@ -33,9 +33,9 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="card">
-      <h2>Users</h2>
-      {error && <p className="error-text">{error}</p>}
+    <div className="panel">
+      <h2 style={{ marginTop: 0 }}>Users</h2>
+      {error && <div className="error">{error}</div>}
       <table>
         <thead>
           <tr>
@@ -57,7 +57,7 @@ export default function AdminUsersPage() {
               <td>{u.enabled ? "Enabled" : "Disabled"}</td>
               <td>
                 <button
-                  className="btn-secondary"
+                  className="btn btn-ghost"
                   onClick={() => toggleEnabled(u)}
                   disabled={u.id === currentUser?.id && u.enabled}
                   title={u.id === currentUser?.id && u.enabled ? "You can't disable your own account" : undefined}
@@ -69,7 +69,9 @@ export default function AdminUsersPage() {
           ))}
           {users.length === 0 && (
             <tr>
-              <td colSpan={6}>No users yet.</td>
+              <td colSpan={6} className="muted">
+                No users yet.
+              </td>
             </tr>
           )}
         </tbody>

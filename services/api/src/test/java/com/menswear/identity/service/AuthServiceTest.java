@@ -4,13 +4,13 @@ import com.menswear.branch.repo.BranchRepository;
 import com.menswear.common.enums.Role;
 import com.menswear.common.exception.BadRequestException;
 import com.menswear.identity.dto.AuthDtos;
+import com.menswear.identity.entity.RefreshToken;
 import com.menswear.identity.entity.User;
+import com.menswear.identity.repo.RefreshTokenRepository;
 import com.menswear.identity.repo.UserRepository;
+import com.menswear.identity.security.JwtService;
 import com.menswear.identity.security.SecurityUtils;
 import com.menswear.identity.security.UserPrincipal;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -22,14 +22,16 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -44,11 +46,9 @@ class AuthServiceTest {
     @Mock
     private AuthenticationManager authenticationManager;
     @Mock
-    private SecurityContextRepository securityContextRepository;
+    private JwtService jwtService;
     @Mock
-    private HttpServletRequest httpRequest;
-    @Mock
-    private HttpServletResponse httpResponse;
+    private RefreshTokenRepository refreshTokenRepository;
 
     @InjectMocks
     private AuthService authService;
@@ -58,22 +58,29 @@ class AuthServiceTest {
         return new UsernamePasswordAuthenticationToken(principal, null, List.of());
     }
 
+    private void setRefreshTokenMinutes(long minutes) {
+        ReflectionTestUtils.setField(authService, "refreshTokenMinutes", minutes);
+    }
+
     @Test
-    void register_createsUserAndEstablishesSession() {
+    void register_createsUserAndIssuesTokens() {
+        setRefreshTokenMinutes(30);
         var request = new AuthDtos.RegisterRequest("Jane Doe", "Jane@Example.com", "password123", null);
         when(userRepository.existsByEmailIgnoreCase("jane@example.com")).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("hashed");
         User saved = User.builder().id(5L).fullName("Jane Doe").email("jane@example.com")
                 .passwordHash("hashed").role(Role.USER).enabled(true).build();
         when(authenticationManager.authenticate(any())).thenReturn(authenticationFor(saved));
+        when(jwtService.generateAccessToken(any())).thenReturn("access-token");
 
-        AuthDtos.MeResponse response = authService.register(request, httpRequest, httpResponse);
+        AuthDtos.TokenResponse response = authService.register(request);
 
-        assertThat(response.email()).isEqualTo("jane@example.com");
-        assertThat(response.role()).isEqualTo("USER");
+        assertThat(response.accessToken()).isEqualTo("access-token");
+        assertThat(response.refreshToken()).isNotBlank();
+        assertThat(response.user().email()).isEqualTo("jane@example.com");
         verify(userRepository).save(any(User.class));
         verify(branchRepository, never()).existsById(any());
-        verify(securityContextRepository).saveContext(any(), eq(httpRequest), eq(httpResponse));
+        verify(refreshTokenRepository).save(any(RefreshToken.class));
     }
 
     @Test
@@ -81,8 +88,7 @@ class AuthServiceTest {
         when(userRepository.existsByEmailIgnoreCase("jane@example.com")).thenReturn(true);
         var request = new AuthDtos.RegisterRequest("Jane Doe", "jane@example.com", "password123", null);
 
-        assertThatThrownBy(() -> authService.register(request, httpRequest, httpResponse))
-                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> authService.register(request)).isInstanceOf(BadRequestException.class);
 
         verify(userRepository, never()).save(any());
     }
@@ -93,25 +99,26 @@ class AuthServiceTest {
         when(branchRepository.existsById(42L)).thenReturn(false);
         var request = new AuthDtos.RegisterRequest("Jane Doe", "jane@example.com", "password123", 42L);
 
-        assertThatThrownBy(() -> authService.register(request, httpRequest, httpResponse))
-                .isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> authService.register(request)).isInstanceOf(BadRequestException.class);
 
         verify(userRepository, never()).save(any());
     }
 
     @Test
-    void login_establishesSessionOnValidCredentials() {
+    void login_issuesTokensOnValidCredentials() {
+        setRefreshTokenMinutes(30);
         User user = User.builder().id(1L).fullName("Jane Doe").email("jane@example.com")
                 .passwordHash("hashed").role(Role.ADMIN).branchId(3L).enabled(true).build();
         when(authenticationManager.authenticate(any())).thenReturn(authenticationFor(user));
+        when(jwtService.generateAccessToken(any())).thenReturn("access-token");
         var request = new AuthDtos.LoginRequest("jane@example.com", "password123");
 
-        AuthDtos.MeResponse response = authService.login(request, httpRequest, httpResponse);
+        AuthDtos.TokenResponse response = authService.login(request);
 
-        assertThat(response.id()).isEqualTo(1L);
-        assertThat(response.role()).isEqualTo("ADMIN");
-        assertThat(response.branchId()).isEqualTo(3L);
-        verify(securityContextRepository).saveContext(any(), eq(httpRequest), eq(httpResponse));
+        assertThat(response.user().id()).isEqualTo(1L);
+        assertThat(response.user().role()).isEqualTo("ADMIN");
+        assertThat(response.user().branchId()).isEqualTo(3L);
+        verify(refreshTokenRepository).save(any(RefreshToken.class));
     }
 
     @Test
@@ -119,28 +126,84 @@ class AuthServiceTest {
         when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("bad credentials"));
         var request = new AuthDtos.LoginRequest("jane@example.com", "wrong-password");
 
-        assertThatThrownBy(() -> authService.login(request, httpRequest, httpResponse))
+        assertThatThrownBy(() -> authService.login(request))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessage("Incorrect email or password");
 
-        verify(securityContextRepository, never()).saveContext(any(), any(), any());
+        verify(refreshTokenRepository, never()).save(any());
     }
 
     @Test
-    void logout_invalidatesExistingSession() {
-        HttpSession session = mock(HttpSession.class);
-        when(httpRequest.getSession(false)).thenReturn(session);
+    void refresh_rotatesTokenAndIssuesNewAccessToken() {
+        setRefreshTokenMinutes(30);
+        User user = User.builder().id(1L).fullName("Jane Doe").email("jane@example.com")
+                .passwordHash("hashed").role(Role.USER).enabled(true).build();
+        RefreshToken existing = RefreshToken.builder().id(9L).token("old-token").userId(1L)
+                .expiresAt(Instant.now().plus(10, ChronoUnit.MINUTES)).build();
+        when(refreshTokenRepository.findByToken("old-token")).thenReturn(Optional.of(existing));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user));
+        when(jwtService.generateAccessToken(any())).thenReturn("new-access-token");
 
-        authService.logout(httpRequest);
+        AuthDtos.TokenResponse response = authService.refresh(new AuthDtos.RefreshRequest("old-token"));
 
-        verify(session).invalidate();
+        assertThat(response.accessToken()).isEqualTo("new-access-token");
+        assertThat(response.refreshToken()).isNotEqualTo("old-token");
+        verify(refreshTokenRepository).delete(existing);
+        verify(refreshTokenRepository).save(any(RefreshToken.class));
     }
 
     @Test
-    void logout_isNoOpWhenNoSessionExists() {
-        when(httpRequest.getSession(false)).thenReturn(null);
+    void refresh_rejectsUnknownToken() {
+        when(refreshTokenRepository.findByToken("missing")).thenReturn(Optional.empty());
 
-        authService.logout(httpRequest);
+        assertThatThrownBy(() -> authService.refresh(new AuthDtos.RefreshRequest("missing")))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void refresh_rejectsExpiredToken() {
+        RefreshToken expired = RefreshToken.builder().id(9L).token("expired-token").userId(1L)
+                .expiresAt(Instant.now().minus(1, ChronoUnit.MINUTES)).build();
+        when(refreshTokenRepository.findByToken("expired-token")).thenReturn(Optional.of(expired));
+
+        assertThatThrownBy(() -> authService.refresh(new AuthDtos.RefreshRequest("expired-token")))
+                .isInstanceOf(BadRequestException.class);
+
+        verify(refreshTokenRepository).delete(expired);
+        verify(userRepository, never()).findById(any());
+    }
+
+    @Test
+    void refresh_rejectsDisabledUser() {
+        User disabled = User.builder().id(1L).fullName("Jane").email("jane@example.com")
+                .passwordHash("h").role(Role.USER).enabled(false).build();
+        RefreshToken existing = RefreshToken.builder().id(9L).token("token").userId(1L)
+                .expiresAt(Instant.now().plus(10, ChronoUnit.MINUTES)).build();
+        when(refreshTokenRepository.findByToken("token")).thenReturn(Optional.of(existing));
+        when(userRepository.findById(1L)).thenReturn(Optional.of(disabled));
+
+        assertThatThrownBy(() -> authService.refresh(new AuthDtos.RefreshRequest("token")))
+                .isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void logout_deletesMatchingRefreshToken() {
+        RefreshToken existing = RefreshToken.builder().id(9L).token("token").userId(1L)
+                .expiresAt(Instant.now().plus(10, ChronoUnit.MINUTES)).build();
+        when(refreshTokenRepository.findByToken("token")).thenReturn(Optional.of(existing));
+
+        authService.logout(new AuthDtos.RefreshRequest("token"));
+
+        verify(refreshTokenRepository).delete(existing);
+    }
+
+    @Test
+    void logout_isNoOpForUnknownToken() {
+        when(refreshTokenRepository.findByToken("missing")).thenReturn(Optional.empty());
+
+        authService.logout(new AuthDtos.RefreshRequest("missing"));
+
+        verify(refreshTokenRepository, never()).delete(any());
     }
 
     @Test

@@ -8,48 +8,47 @@ import { ApiError } from "@/lib/api";
 export default function LoginPage() {
   const { login } = useAuth();
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: FormEvent) {
+  async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setError(null);
-    setSubmitting(true);
+    setError("");
+    setLoading(true);
+    const fd = new FormData(e.currentTarget);
     try {
-      await login(email, password);
+      await login(String(fd.get("email")), String(fd.get("password")));
       router.push("/");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   }
 
   return (
-    <div className="card" style={{ maxWidth: 400, margin: "0 auto" }}>
-      <h1>Sign in</h1>
-      {error && <p className="error-text">{error}</p>}
-      <form onSubmit={handleSubmit}>
-        <div className="form-field">
-          <label htmlFor="email">Email</label>
-          <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+    <section className="auth-shell">
+      <div className="container-narrow">
+        <div className="page-header">
+          <span className="section-label">Account</span>
+          <h2>Welcome back</h2>
+          <p className="lead">Sign in to continue.</p>
         </div>
-        <div className="form-field">
-          <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-        <button className="btn-primary" type="submit" disabled={submitting} style={{ width: "100%" }}>
-          {submitting ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
-    </div>
+        <form className="panel form" onSubmit={onSubmit}>
+          <label>
+            Email
+            <input name="email" type="email" required autoComplete="username" />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" required autoComplete="current-password" />
+          </label>
+          {error && <div className="error">{error}</div>}
+          <button className="btn btn-primary" disabled={loading}>
+            {loading ? "Please wait…" : "Sign in"}
+          </button>
+        </form>
+      </div>
+    </section>
   );
 }

@@ -1,4 +1,5 @@
-const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const ACCESS_TOKEN_KEY = "menswear_access_token";
+const REFRESH_TOKEN_KEY = "menswear_refresh_token";
 
 export class ApiError extends Error {
   status: number;
@@ -11,30 +12,76 @@ export class ApiError extends Error {
   }
 }
 
-function readCookie(name: string): string | null {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : null;
+export function getAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
-export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const method = (options.method ?? "GET").toUpperCase();
-  const headers = new Headers(options.headers);
+export function getRefreshToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
+}
 
+export function storeTokens(accessToken: string, refreshToken: string) {
+  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+}
+
+export function clearTokens() {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+}
+
+let refreshInFlight: Promise<string | null> | null = null;
+
+function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return Promise.resolve(null);
+
+  if (!refreshInFlight) {
+    refreshInFlight = fetch("/api/v1/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("refresh failed");
+        const data = await res.json();
+        storeTokens(data.accessToken, data.refreshToken);
+        return data.accessToken as string;
+      })
+      .catch(() => {
+        clearTokens();
+        return null;
+      })
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
+function rawFetch(path: string, options: RequestInit): Promise<Response> {
+  const headers = new Headers(options.headers);
   if (options.body !== undefined && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  if (MUTATING_METHODS.has(method)) {
-    const csrfToken = readCookie("XSRF-TOKEN");
-    if (csrfToken) headers.set("X-XSRF-TOKEN", csrfToken);
-  }
+  const accessToken = getAccessToken();
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  return fetch(`/api/v1${path}`, { ...options, headers });
+}
 
-  const response = await fetch(`/api/v1${path}`, {
-    ...options,
-    method,
-    headers,
-    credentials: "include",
-  });
+const NO_RETRY_PATHS = new Set(["/auth/login", "/auth/register", "/auth/refresh"]);
+
+export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  let response = await rawFetch(path, options);
+
+  if (response.status === 401 && !NO_RETRY_PATHS.has(path)) {
+    const newAccessToken = await refreshAccessToken();
+    if (newAccessToken) {
+      response = await rawFetch(path, options);
+    }
+  }
 
   if (response.status === 204) {
     return undefined as T;

@@ -2,8 +2,6 @@ package com.menswear.identity.web;
 
 import com.menswear.identity.dto.AuthDtos;
 import com.menswear.identity.service.AuthService;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,25 +16,22 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public AuthDtos.MeResponse register(
-            @Valid @RequestBody AuthDtos.RegisterRequest request,
-            HttpServletRequest httpRequest,
-            HttpServletResponse httpResponse
-    ) {
-        return authService.register(request, httpRequest, httpResponse);
+    public AuthDtos.TokenResponse register(@Valid @RequestBody AuthDtos.RegisterRequest request) {
+        return authService.register(request);
     }
 
     @PostMapping("/login")
-    public AuthDtos.MeResponse login(
-            @Valid @RequestBody AuthDtos.LoginRequest request,
-            HttpServletRequest httpRequest,
-            HttpServletResponse httpResponse
-    ) {
-        return authService.login(request, httpRequest, httpResponse);
+    public AuthDtos.TokenResponse login(@Valid @RequestBody AuthDtos.LoginRequest request) {
+        return authService.login(request);
+    }
+
+    @PostMapping("/refresh")
+    public AuthDtos.TokenResponse refresh(@Valid @RequestBody AuthDtos.RefreshRequest request) {
+        return authService.refresh(request);
     }
 
     @PostMapping("/logout")
-    public AuthDtos.MessageResponse logout(HttpServletRequest request) {
+    public AuthDtos.MessageResponse logout(@Valid @RequestBody AuthDtos.RefreshRequest request) {
         authService.logout(request);
         return new AuthDtos.MessageResponse("Signed out.");
     }

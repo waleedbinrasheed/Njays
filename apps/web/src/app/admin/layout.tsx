@@ -17,16 +17,23 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [loading, user, router]);
 
   if (loading || !user || user.role !== "ADMIN") {
-    return <p>Loading…</p>;
+    return (
+      <div className="container section">
+        <p className="muted">Loading…</p>
+      </div>
+    );
   }
 
   return (
-    <div>
-      <div className="tabs">
-        <Link href="/admin/branches" className={`tab ${pathname?.startsWith("/admin/branches") ? "active" : ""}`}>
+    <div className="container section">
+      <div className="admin-nav">
+        <Link
+          href="/admin/branches"
+          className={`admin-nav-tab ${pathname?.startsWith("/admin/branches") ? "active" : ""}`}
+        >
           Branches
         </Link>
-        <Link href="/admin/users" className={`tab ${pathname?.startsWith("/admin/users") ? "active" : ""}`}>
+        <Link href="/admin/users" className={`admin-nav-tab ${pathname?.startsWith("/admin/users") ? "active" : ""}`}>
           Users
         </Link>
       </div>

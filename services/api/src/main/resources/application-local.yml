@@ -9,5 +9,3 @@ spring:
       ddl-auto: none
   flyway:
     enabled: true
-  # Redis still needs to be reachable even in this profile (e.g. `docker compose up -d redis`) —
-  # there's no embedded/in-memory equivalent for Spring Session the way H2 stands in for Postgres.
