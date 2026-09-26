@@ -18,10 +18,4 @@ public final class SecurityUtils {
     public static Long currentUserId() {
         return currentUser().getId();
     }
-
-    public static boolean isAdmin() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return auth != null && auth.getPrincipal() instanceof UserPrincipal principal
-                && "ADMIN".equals(principal.getRole());
-    }
 }

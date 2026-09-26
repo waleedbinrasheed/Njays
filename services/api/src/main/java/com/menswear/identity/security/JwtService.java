@@ -1,52 +1,45 @@
 package com.menswear.identity.security;
 
+import com.menswear.config.MenswearProperties;
 import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Date;
-import java.util.Optional;
+import java.util.Map;
 
-@Component
+@Service
 public class JwtService {
 
+    private final MenswearProperties properties;
     private final SecretKey key;
-    private final long accessTokenMinutes;
 
-    public JwtService(
-            @Value("${jwt.secret}") String secret,
-            @Value("${jwt.access-token-minutes}") long accessTokenMinutes
-    ) {
-        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
-        this.accessTokenMinutes = accessTokenMinutes;
+    public JwtService(MenswearProperties properties) {
+        this.properties = properties;
+        this.key = Keys.hmacShaKeyFor(properties.jwt().secret().getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateAccessToken(UserPrincipal principal) {
+    public String createAccessToken(Long userId, String email, String role) {
         Instant now = Instant.now();
+        Instant exp = now.plusSeconds(properties.jwt().accessTokenMinutes() * 60);
         return Jwts.builder()
-                .subject(principal.getEmail())
-                .claim("uid", principal.getId())
-                .claim("role", principal.getRole())
+                .subject(String.valueOf(userId))
+                .claims(Map.of("email", email, "role", role, "type", "access"))
                 .issuedAt(Date.from(now))
-                .expiration(Date.from(now.plus(accessTokenMinutes, ChronoUnit.MINUTES)))
+                .expiration(Date.from(exp))
                 .signWith(key)
                 .compact();
     }
 
-    /** Empty if the token is missing, malformed, expired, or has a bad signature. */
-    public Optional<String> extractEmail(String token) {
-        try {
-            Claims claims = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
-            return Optional.of(claims.getSubject());
-        } catch (JwtException | IllegalArgumentException e) {
-            return Optional.empty();
-        }
+    public Claims parse(String token) {
+        return Jwts.parser()
+                .verifyWith(key)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
     }
 }

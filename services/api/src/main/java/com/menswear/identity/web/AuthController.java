@@ -16,28 +16,27 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public AuthDtos.TokenResponse register(@Valid @RequestBody AuthDtos.RegisterRequest request) {
+    public AuthDtos.AuthResponse register(@Valid @RequestBody AuthDtos.RegisterRequest request) {
         return authService.register(request);
     }
 
     @PostMapping("/login")
-    public AuthDtos.TokenResponse login(@Valid @RequestBody AuthDtos.LoginRequest request) {
+    public AuthDtos.AuthResponse login(@Valid @RequestBody AuthDtos.LoginRequest request) {
         return authService.login(request);
     }
 
     @PostMapping("/refresh")
-    public AuthDtos.TokenResponse refresh(@Valid @RequestBody AuthDtos.RefreshRequest request) {
+    public AuthDtos.AuthResponse refresh(@Valid @RequestBody AuthDtos.RefreshRequest request) {
         return authService.refresh(request);
     }
 
-    @PostMapping("/logout")
-    public AuthDtos.MessageResponse logout(@Valid @RequestBody AuthDtos.RefreshRequest request) {
-        authService.logout(request);
-        return new AuthDtos.MessageResponse("Signed out.");
+    @PostMapping("/forgot-password")
+    public AuthDtos.ForgotPasswordResponse forgotPassword(@Valid @RequestBody AuthDtos.ForgotPasswordRequest request) {
+        return authService.forgotPassword(request);
     }
 
-    @GetMapping("/me")
-    public AuthDtos.MeResponse me() {
-        return authService.me();
+    @PostMapping("/reset-password")
+    public AuthDtos.MessageResponse resetPassword(@Valid @RequestBody AuthDtos.ResetPasswordRequest request) {
+        return authService.resetPassword(request);
     }
 }

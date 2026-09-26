@@ -32,7 +32,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleDenied(Exception ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
                 "timestamp", Instant.now().toString(),
-                "error", "You don't have permission to do that."
+                "error", "Access denied. Sign in as admin and try again."
         ));
     }
 
@@ -40,7 +40,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleAuth(Exception ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
                 "timestamp", Instant.now().toString(),
-                "error", "Please sign in to continue."
+                "error", "Session expired. Please sign in again."
         ));
     }
 

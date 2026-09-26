@@ -32,16 +32,52 @@ services:
 
       - key: JWT_SECRET
         generateValue: true
-      - key: ACCESS_TOKEN_MINUTES
-        value: "15"
-      # How many minutes of inactivity before a user is signed out (sliding —
-      # extended each time the frontend refreshes the access token).
-      - key: SESSION_TIMEOUT_MINUTES
-        value: "30"
 
       # Fill in with https://<menswear-web's-actual-onrender-url> once the web
       # service exists (see walkthrough step "Wire the two services together").
+      - key: FRONTEND_APP_URL
+        sync: false
       - key: CORS_ORIGINS
+        sync: false
+
+      - key: EXPOSE_RESET_LINK
+        value: "false"
+
+      # Shown on printed invoices — fill in with your real business details.
+      - key: BUSINESS_NAME
+        sync: false
+      - key: BUSINESS_ADDRESS
+        sync: false
+      - key: BUSINESS_PHONE
+        sync: false
+      - key: BUSINESS_EMAIL
+        sync: false
+
+      - key: BANK_ACCOUNT_TITLE
+        value: Menswear Tailoring
+      - key: BANK_ACCOUNT_NUMBER
+        value: "0123456789"
+      - key: BANK_NAME
+        value: HBL
+      - key: BANK_IBAN
+        value: PK00HABB0000000123456789
+
+      # Real JazzCash production credentials — never commit these, set in dashboard.
+      - key: JAZZCASH_MERCHANT_ID
+        sync: false
+      - key: JAZZCASH_PASSWORD
+        sync: false
+      - key: JAZZCASH_INTEGRITY_SALT
+        sync: false
+      - key: JAZZCASH_SANDBOX
+        value: "true"
+      - key: JAZZCASH_REQUIRE_HASH
+        value: "true"
+      # https://<menswear-api's-actual-onrender-url>/api/v1/payments/webhooks/jazzcash
+      - key: JAZZCASH_RETURN_URL
+        sync: false
+      # https://<menswear-web's-actual-onrender-url>/checkout/jazzcash/return
+      - key: JAZZCASH_FRONTEND_RETURN_URL
         sync: false
 
   # ---- Frontend: Next.js storefront (native Node runtime, no Docker needed) ----
@@ -54,8 +90,6 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm run start -- -p $PORT
     envVars:
-      # https://<menswear-api's-actual-onrender-url> — server-side only, used by
-      # the Next.js rewrite proxy so the browser only ever talks to this app's
-      # own origin (avoids cross-site cookie/CORS issues entirely).
-      - key: API_BASE_URL
+      # https://<menswear-api's-actual-onrender-url>
+      - key: NEXT_PUBLIC_API_URL
         sync: false

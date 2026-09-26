@@ -1,4 +1,5 @@
 target/
-*.md
-.git
-.idea
+.idea/
+*.iml
+uploads/
+*.log

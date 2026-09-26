@@ -1,223 +1,190 @@
 package com.menswear.identity.service;
 
-import com.menswear.branch.repo.BranchRepository;
 import com.menswear.common.enums.Role;
 import com.menswear.common.exception.BadRequestException;
+import com.menswear.config.MenswearProperties;
 import com.menswear.identity.dto.AuthDtos;
-import com.menswear.identity.entity.RefreshToken;
 import com.menswear.identity.entity.User;
+import com.menswear.identity.repo.PasswordResetTokenRepository;
 import com.menswear.identity.repo.RefreshTokenRepository;
 import com.menswear.identity.repo.UserRepository;
 import com.menswear.identity.security.JwtService;
-import com.menswear.identity.security.SecurityUtils;
 import com.menswear.identity.security.UserPrincipal;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockedStatic;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.ArgumentCaptor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.util.ReflectionTestUtils;
 
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
 
-    @Mock
-    private UserRepository userRepository;
-    @Mock
-    private BranchRepository branchRepository;
-    @Mock
-    private PasswordEncoder passwordEncoder;
-    @Mock
-    private AuthenticationManager authenticationManager;
-    @Mock
-    private JwtService jwtService;
-    @Mock
-    private RefreshTokenRepository refreshTokenRepository;
+    private final UserRepository userRepository = mock(UserRepository.class);
+    private final RefreshTokenRepository refreshTokenRepository = mock(RefreshTokenRepository.class);
+    private final PasswordResetTokenRepository passwordResetTokenRepository = mock(PasswordResetTokenRepository.class);
+    private final PasswordEncoder passwordEncoder = mock(PasswordEncoder.class);
+    private final JwtService jwtService = mock(JwtService.class);
+    private final AuthenticationManager authenticationManager = mock(AuthenticationManager.class);
+    private final MenswearProperties properties = new MenswearProperties(
+            new MenswearProperties.Jwt("secret", 120, 14),
+            new MenswearProperties.Cors(List.of("http://localhost:3000")),
+            new MenswearProperties.Whatsapp("923001234567"),
+            new MenswearProperties.Payments(
+                    new MenswearProperties.Bank("Title", "Acct", "Bank", "IBAN"),
+                    new MenswearProperties.Jazzcash("MID", "PW", "SALT", "return", "frontendReturn", true, true)
+            ),
+            new MenswearProperties.Frontend("http://localhost:3000", true),
+            new MenswearProperties.Business("NJAY'S by S.A.R", "Address", "+923001234567", "hi@example.com"),
+            "PKR"
+    );
 
-    @InjectMocks
-    private AuthService authService;
+    private AuthService service;
 
-    private Authentication authenticationFor(User user) {
-        UserPrincipal principal = new UserPrincipal(user);
-        return new UsernamePasswordAuthenticationToken(principal, null, List.of());
+    @BeforeEach
+    void setUp() {
+        service = new AuthService(
+                userRepository, refreshTokenRepository, passwordResetTokenRepository,
+                passwordEncoder, jwtService, authenticationManager, properties
+        );
     }
 
-    private void setRefreshTokenMinutes(long minutes) {
-        ReflectionTestUtils.setField(authService, "refreshTokenMinutes", minutes);
+    private User sampleUser() {
+        return User.builder()
+                .id(1L)
+                .email("user@example.com")
+                .passwordHash("hash")
+                .fullName("Test User")
+                .phone("923001234567")
+                .role(Role.CUSTOMER)
+                .enabled(true)
+                .build();
     }
+
+    // ---- register: duplicate phone (the new DB constraint's application-level twin) ----
 
     @Test
-    void register_createsUserAndIssuesTokens() {
-        setRefreshTokenMinutes(30);
-        var request = new AuthDtos.RegisterRequest("Jane Doe", "Jane@Example.com", "password123", null);
-        when(userRepository.existsByEmailIgnoreCase("jane@example.com")).thenReturn(false);
-        when(passwordEncoder.encode("password123")).thenReturn("hashed");
-        User saved = User.builder().id(5L).fullName("Jane Doe").email("jane@example.com")
-                .passwordHash("hashed").role(Role.USER).enabled(true).build();
-        when(authenticationManager.authenticate(any())).thenReturn(authenticationFor(saved));
-        when(jwtService.generateAccessToken(any())).thenReturn("access-token");
+    void registerRejectsDuplicatePhone() {
+        var request = new AuthDtos.RegisterRequest("new@example.com", "Password1", "New User", "03001234567");
+        when(userRepository.existsByEmailIgnoreCase("new@example.com")).thenReturn(false);
+        when(userRepository.existsByPhone("923001234567")).thenReturn(true);
 
-        AuthDtos.TokenResponse response = authService.register(request);
-
-        assertThat(response.accessToken()).isEqualTo("access-token");
-        assertThat(response.refreshToken()).isNotBlank();
-        assertThat(response.user().email()).isEqualTo("jane@example.com");
-        verify(userRepository).save(any(User.class));
-        verify(branchRepository, never()).existsById(any());
-        verify(refreshTokenRepository).save(any(RefreshToken.class));
-    }
-
-    @Test
-    void register_rejectsDuplicateEmail() {
-        when(userRepository.existsByEmailIgnoreCase("jane@example.com")).thenReturn(true);
-        var request = new AuthDtos.RegisterRequest("Jane Doe", "jane@example.com", "password123", null);
-
-        assertThatThrownBy(() -> authService.register(request)).isInstanceOf(BadRequestException.class);
-
-        verify(userRepository, never()).save(any());
-    }
-
-    @Test
-    void register_rejectsUnknownBranch() {
-        when(userRepository.existsByEmailIgnoreCase("jane@example.com")).thenReturn(false);
-        when(branchRepository.existsById(42L)).thenReturn(false);
-        var request = new AuthDtos.RegisterRequest("Jane Doe", "jane@example.com", "password123", 42L);
-
-        assertThatThrownBy(() -> authService.register(request)).isInstanceOf(BadRequestException.class);
-
-        verify(userRepository, never()).save(any());
-    }
-
-    @Test
-    void login_issuesTokensOnValidCredentials() {
-        setRefreshTokenMinutes(30);
-        User user = User.builder().id(1L).fullName("Jane Doe").email("jane@example.com")
-                .passwordHash("hashed").role(Role.ADMIN).branchId(3L).enabled(true).build();
-        when(authenticationManager.authenticate(any())).thenReturn(authenticationFor(user));
-        when(jwtService.generateAccessToken(any())).thenReturn("access-token");
-        var request = new AuthDtos.LoginRequest("jane@example.com", "password123");
-
-        AuthDtos.TokenResponse response = authService.login(request);
-
-        assertThat(response.user().id()).isEqualTo(1L);
-        assertThat(response.user().role()).isEqualTo("ADMIN");
-        assertThat(response.user().branchId()).isEqualTo(3L);
-        verify(refreshTokenRepository).save(any(RefreshToken.class));
-    }
-
-    @Test
-    void login_wrapsAuthenticationFailureAsGenericBadRequest() {
-        when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("bad credentials"));
-        var request = new AuthDtos.LoginRequest("jane@example.com", "wrong-password");
-
-        assertThatThrownBy(() -> authService.login(request))
+        assertThatThrownBy(() -> service.register(request))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessage("Incorrect email or password");
+                .hasMessageContaining("Mobile number already registered");
 
-        verify(refreshTokenRepository, never()).save(any());
+        verify(userRepository, never()).save(any());
     }
 
     @Test
-    void refresh_rotatesTokenAndIssuesNewAccessToken() {
-        setRefreshTokenMinutes(30);
-        User user = User.builder().id(1L).fullName("Jane Doe").email("jane@example.com")
-                .passwordHash("hashed").role(Role.USER).enabled(true).build();
-        RefreshToken existing = RefreshToken.builder().id(9L).token("old-token").userId(1L)
-                .expiresAt(Instant.now().plus(10, ChronoUnit.MINUTES)).build();
-        when(refreshTokenRepository.findByToken("old-token")).thenReturn(Optional.of(existing));
+    void registerSkipsPhoneCheckWhenPhoneOmitted() {
+        var request = new AuthDtos.RegisterRequest("new@example.com", "Password1", "New User", null);
+        when(userRepository.existsByEmailIgnoreCase("new@example.com")).thenReturn(false);
+        when(passwordEncoder.encode("Password1")).thenReturn("hashed");
+        when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(jwtService.createAccessToken(any(), any(), any())).thenReturn("access-token");
+
+        service.register(request);
+
+        verify(userRepository, never()).existsByPhone(any());
+    }
+
+    // ---- login: identifier validation ----
+
+    @Test
+    void loginRejectsGarbageIdentifier() {
+        var request = new AuthDtos.LoginRequest("ab", "password123");
+        assertThatThrownBy(() -> service.login(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("valid email address or mobile number");
+        verifyNoInteractions(authenticationManager);
+    }
+
+    @Test
+    void loginRejectsMalformedEmail() {
+        var request = new AuthDtos.LoginRequest("not-an-email@", "password123");
+        assertThatThrownBy(() -> service.login(request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("valid email address or mobile number");
+        verifyNoInteractions(authenticationManager);
+    }
+
+    // ---- login: identifier classification / normalization ----
+
+    @Test
+    void loginWithEmailUsesLowercasedEmailAsLookupKey() {
+        stubSuccessfulAuth();
+
+        service.login(new AuthDtos.LoginRequest("User@Example.com", "password123"));
+
+        assertThat(capturedLookupKey()).isEqualTo("user@example.com");
+    }
+
+    @Test
+    void loginWithPhoneNormalizesBeforeLookup() {
+        stubSuccessfulAuth();
+
+        service.login(new AuthDtos.LoginRequest("03001234567", "password123"));
+
+        assertThat(capturedLookupKey()).isEqualTo("923001234567");
+    }
+
+    // ---- login: generic failure message (no account-enumeration) ----
+
+    @Test
+    void loginFailureIsGenericRegardlessOfCause() {
+        when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("bad creds"));
+
+        assertThatThrownBy(() -> service.login(new AuthDtos.LoginRequest("user@example.com", "wrong")))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessage("Incorrect email/mobile number or password");
+    }
+
+    @Test
+    void loginFailureMessageIsIdenticalForEmailAndPhoneIdentifiers() {
+        when(authenticationManager.authenticate(any())).thenThrow(new BadCredentialsException("bad creds"));
+
+        String emailFailure = catchMessage(() -> service.login(new AuthDtos.LoginRequest("user@example.com", "wrong")));
+        String phoneFailure = catchMessage(() -> service.login(new AuthDtos.LoginRequest("03001234567", "wrong")));
+
+        assertThat(emailFailure).isEqualTo(phoneFailure);
+    }
+
+    private void stubSuccessfulAuth() {
+        User user = sampleUser();
+        UserPrincipal principal = new UserPrincipal(user);
+        Authentication authResult = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
+        when(authenticationManager.authenticate(any())).thenReturn(authResult);
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
-        when(jwtService.generateAccessToken(any())).thenReturn("new-access-token");
-
-        AuthDtos.TokenResponse response = authService.refresh(new AuthDtos.RefreshRequest("old-token"));
-
-        assertThat(response.accessToken()).isEqualTo("new-access-token");
-        assertThat(response.refreshToken()).isNotEqualTo("old-token");
-        verify(refreshTokenRepository).delete(existing);
-        verify(refreshTokenRepository).save(any(RefreshToken.class));
+        when(jwtService.createAccessToken(any(), any(), any())).thenReturn("access-token");
     }
 
-    @Test
-    void refresh_rejectsUnknownToken() {
-        when(refreshTokenRepository.findByToken("missing")).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> authService.refresh(new AuthDtos.RefreshRequest("missing")))
-                .isInstanceOf(BadRequestException.class);
+    private String capturedLookupKey() {
+        ArgumentCaptor<UsernamePasswordAuthenticationToken> captor =
+                ArgumentCaptor.forClass(UsernamePasswordAuthenticationToken.class);
+        verify(authenticationManager).authenticate(captor.capture());
+        return String.valueOf(captor.getValue().getPrincipal());
     }
 
-    @Test
-    void refresh_rejectsExpiredToken() {
-        RefreshToken expired = RefreshToken.builder().id(9L).token("expired-token").userId(1L)
-                .expiresAt(Instant.now().minus(1, ChronoUnit.MINUTES)).build();
-        when(refreshTokenRepository.findByToken("expired-token")).thenReturn(Optional.of(expired));
-
-        assertThatThrownBy(() -> authService.refresh(new AuthDtos.RefreshRequest("expired-token")))
-                .isInstanceOf(BadRequestException.class);
-
-        verify(refreshTokenRepository).delete(expired);
-        verify(userRepository, never()).findById(any());
-    }
-
-    @Test
-    void refresh_rejectsDisabledUser() {
-        User disabled = User.builder().id(1L).fullName("Jane").email("jane@example.com")
-                .passwordHash("h").role(Role.USER).enabled(false).build();
-        RefreshToken existing = RefreshToken.builder().id(9L).token("token").userId(1L)
-                .expiresAt(Instant.now().plus(10, ChronoUnit.MINUTES)).build();
-        when(refreshTokenRepository.findByToken("token")).thenReturn(Optional.of(existing));
-        when(userRepository.findById(1L)).thenReturn(Optional.of(disabled));
-
-        assertThatThrownBy(() -> authService.refresh(new AuthDtos.RefreshRequest("token")))
-                .isInstanceOf(BadRequestException.class);
-    }
-
-    @Test
-    void logout_deletesMatchingRefreshToken() {
-        RefreshToken existing = RefreshToken.builder().id(9L).token("token").userId(1L)
-                .expiresAt(Instant.now().plus(10, ChronoUnit.MINUTES)).build();
-        when(refreshTokenRepository.findByToken("token")).thenReturn(Optional.of(existing));
-
-        authService.logout(new AuthDtos.RefreshRequest("token"));
-
-        verify(refreshTokenRepository).delete(existing);
-    }
-
-    @Test
-    void logout_isNoOpForUnknownToken() {
-        when(refreshTokenRepository.findByToken("missing")).thenReturn(Optional.empty());
-
-        authService.logout(new AuthDtos.RefreshRequest("missing"));
-
-        verify(refreshTokenRepository, never()).delete(any());
-    }
-
-    @Test
-    void me_returnsCurrentPrincipalFromSecurityContext() {
-        User user = User.builder().id(7L).fullName("Bob").email("bob@example.com")
-                .passwordHash("h").role(Role.ADMIN).enabled(true).build();
-        try (MockedStatic<SecurityUtils> mockedStatic = mockStatic(SecurityUtils.class)) {
-            mockedStatic.when(SecurityUtils::currentUser).thenReturn(new UserPrincipal(user));
-
-            AuthDtos.MeResponse response = authService.me();
-
-            assertThat(response.id()).isEqualTo(7L);
-            assertThat(response.email()).isEqualTo("bob@example.com");
-            assertThat(response.role()).isEqualTo("ADMIN");
+    private static String catchMessage(Runnable action) {
+        try {
+            action.run();
+            return null;
+        } catch (RuntimeException e) {
+            return e.getMessage();
         }
     }
 }

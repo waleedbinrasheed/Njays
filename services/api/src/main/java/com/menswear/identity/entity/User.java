@@ -19,22 +19,21 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "full_name", nullable = false)
-    private String fullName;
-
-    @Column(nullable = false, unique = true)
+    /** Nullable: admin-created walk-in customers may not have one. */
+    @Column(unique = true)
     private String email;
 
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
+    @Column(name = "full_name", nullable = false)
+    private String fullName;
+
+    private String phone;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role;
-
-    /** Optional home branch. Not currently a permission boundary — see Requirement 1 notes. */
-    @Column(name = "branch_id")
-    private Long branchId;
 
     @Column(nullable = false)
     private boolean enabled;
@@ -51,8 +50,9 @@ public class User {
         createdAt = now;
         updatedAt = now;
         if (role == null) {
-            role = Role.USER;
+            role = Role.CUSTOMER;
         }
+        enabled = true;
     }
 
     @PreUpdate
