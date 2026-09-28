@@ -1,6 +1,8 @@
 package com.menswear.orders.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.menswear.branch.entity.Branch;
+import com.menswear.branch.repo.BranchRepository;
 import com.menswear.cart.entity.Cart;
 import com.menswear.cart.entity.CartItem;
 import com.menswear.cart.service.CartService;
@@ -10,6 +12,7 @@ import com.menswear.catalog.repo.FabricColorRepository;
 import com.menswear.catalog.repo.ProductRepository;
 import com.menswear.common.enums.OrderStatus;
 import com.menswear.common.enums.OrderType;
+import com.menswear.common.enums.PaymentStatus;
 import com.menswear.common.exception.BadRequestException;
 import com.menswear.common.exception.NotFoundException;
 import com.menswear.identity.service.AuthService;
@@ -22,12 +25,16 @@ import com.menswear.orders.entity.OrderItem;
 import com.menswear.orders.entity.OrderStatusHistory;
 import com.menswear.orders.entity.ShopOrder;
 import com.menswear.orders.repo.OrderRepository;
+import com.menswear.payments.entity.Payment;
+import com.menswear.payments.repo.PaymentRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Year;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -49,6 +56,8 @@ public class OrderService {
     private final ProductRepository productRepository;
     private final FabricColorRepository fabricColorRepository;
     private final MeasurementProfileRepository measurementProfileRepository;
+    private final BranchRepository branchRepository;
+    private final PaymentRepository paymentRepository;
     private final ObjectMapper objectMapper;
 
     public OrderService(
@@ -57,6 +66,8 @@ public class OrderService {
             ProductRepository productRepository,
             FabricColorRepository fabricColorRepository,
             MeasurementProfileRepository measurementProfileRepository,
+            BranchRepository branchRepository,
+            PaymentRepository paymentRepository,
             ObjectMapper objectMapper
     ) {
         this.orderRepository = orderRepository;
@@ -64,6 +75,8 @@ public class OrderService {
         this.productRepository = productRepository;
         this.fabricColorRepository = fabricColorRepository;
         this.measurementProfileRepository = measurementProfileRepository;
+        this.branchRepository = branchRepository;
+        this.paymentRepository = paymentRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -85,7 +98,8 @@ public class OrderService {
                 .orderType(type)
                 .status(initial)
                 .currency("PKR")
-                .shippingPaisa(0L)
+                .discountPaisa(0L)
+                .dispatchCostPaisa(0L)
                 .shippingAddressJson(writeJson(request.shippingAddress()))
                 .whatsappPhone(AuthService.normalizePhone(request.whatsappPhone()))
                 .customerNote(request.customerNote())
@@ -131,19 +145,19 @@ public class OrderService {
 
         ShopOrder saved = orderRepository.save(order);
         cart.getItems().clear();
-        return toDto(saved);
+        return toDto(saved, null);
     }
 
     @Transactional(readOnly = true)
     public List<OrderDtos.OrderResponse> myOrders() {
         return orderRepository.findByUserIdOrderByCreatedAtDesc(SecurityUtils.currentUserId())
-                .stream().map(this::toDto).toList();
+                .stream().map(o -> toDto(o, null)).toList();
     }
 
     @Transactional(readOnly = true)
     public OrderDtos.OrderResponse myOrder(Long id) {
         return toDto(orderRepository.findByIdAndUserId(id, SecurityUtils.currentUserId())
-                .orElseThrow(() -> new NotFoundException("Order not found")));
+                .orElseThrow(() -> new NotFoundException("Order not found")), null);
     }
 
     @Transactional(readOnly = true)
@@ -167,14 +181,14 @@ public class OrderService {
         OrderStatus from = order.getStatus();
         OrderStatus to = request.status();
         if (from == to) {
-            return toDto(order);
+            return toDto(order, null);
         }
         if (STAFF_ONLY.contains(to) && actorId == null) {
             throw new BadRequestException("Staff required for this status");
         }
         order.setStatus(to);
         appendHistory(order, from, to, request.note(), actorId);
-        return toDto(orderRepository.save(order));
+        return toDto(orderRepository.save(order), null);
     }
 
     @Transactional
@@ -192,28 +206,46 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public List<OrderDtos.OrderResponse> adminList() {
+        Map<Long, String> branchNames = branchNameCache();
         return orderRepository.findAll().stream()
                 .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
-                .map(this::toDto)
+                .map(o -> toDto(o, branchNames))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderDtos.OrderResponse> adminListForCustomer(Long customerId) {
+        Map<Long, String> branchNames = branchNameCache();
+        return orderRepository.findByUserIdOrderByCreatedAtDesc(customerId).stream()
+                .map(o -> toDto(o, branchNames))
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public OrderDtos.OrderResponse adminGet(Long id) {
-        return toDto(orderRepository.findById(id).orElseThrow(() -> new NotFoundException("Order not found")));
+        return toDto(orderRepository.findById(id).orElseThrow(() -> new NotFoundException("Order not found")), null);
     }
 
     /**
      * In-shop point-of-sale order creation. Bypasses the cart entirely — items
      * are supplied directly — since the admin is acting on behalf of a walk-in
      * customer, not the currently authenticated user. Caller is responsible
-     * for having already verified customerId refers to a real customer.
+     * for having already verified customerId refers to a real customer, and
+     * for resolving createdBranchId/dispatchCostPaisa (see AdminOrderService).
      */
     @Transactional
-    public OrderDtos.OrderResponse createForCustomer(Long customerId, AdminOrderDtos.CreateOrderRequest request, Long actorId) {
+    public OrderDtos.OrderResponse createForCustomer(
+            Long customerId,
+            AdminOrderDtos.CreateOrderRequest request,
+            Long actorId,
+            Long resolvedCreatedBranchId,
+            long resolvedDispatchCostPaisa
+    ) {
         boolean anyCustom = request.items().stream().anyMatch(AdminOrderDtos.CreateOrderItemRequest::custom);
         OrderType type = anyCustom ? OrderType.CUSTOM : OrderType.READY;
         OrderStatus initial = anyCustom ? OrderStatus.MEASUREMENT_SUBMITTED : OrderStatus.PAYMENT_PENDING;
+
+        long discount = request.discountPaisa() == null ? 0L : request.discountPaisa();
 
         long subtotal = 0;
         ShopOrder order = ShopOrder.builder()
@@ -222,10 +254,14 @@ public class OrderService {
                 .orderType(type)
                 .status(initial)
                 .currency("PKR")
-                .shippingPaisa(0L)
+                .discountPaisa(discount)
+                .dispatchCostPaisa(resolvedDispatchCostPaisa)
                 .shippingAddressJson(writeJson(request.shippingAddress()))
                 .whatsappPhone(AuthService.normalizePhone(request.whatsappPhone()))
                 .customerNote(request.customerNote())
+                .createdBranchId(resolvedCreatedBranchId)
+                .dispatchBranchId(request.dispatchBranchId())
+                .expectedDeliveryDate(request.expectedDeliveryDate())
                 .build();
 
         for (AdminOrderDtos.CreateOrderItemRequest itemReq : request.items()) {
@@ -270,15 +306,19 @@ public class OrderService {
             order.getItems().add(item);
         }
 
+        if (discount > subtotal) {
+            throw new BadRequestException("Discount cannot exceed the subtotal");
+        }
+
         order.setSubtotalPaisa(subtotal);
-        order.setTotalPaisa(subtotal);
+        order.setTotalPaisa(subtotal - discount + resolvedDispatchCostPaisa);
         appendHistory(order, null, initial, "Order created in-store by staff", actorId);
         if (anyCustom) {
             appendHistory(order, initial, OrderStatus.PAYMENT_PENDING, "Awaiting payment", actorId);
             order.setStatus(OrderStatus.PAYMENT_PENDING);
         }
 
-        return toDto(orderRepository.save(order));
+        return toDto(orderRepository.save(order), null);
     }
 
     private void appendHistory(ShopOrder order, OrderStatus from, OrderStatus to, String note, Long actorId) {
@@ -304,7 +344,31 @@ public class OrderService {
         }
     }
 
-    private OrderDtos.OrderResponse toDto(ShopOrder order) {
+    private Map<Long, String> branchNameCache() {
+        Map<Long, String> map = new HashMap<>();
+        for (Branch b : branchRepository.findAll()) {
+            map.put(b.getId(), b.getName());
+        }
+        return map;
+    }
+
+    private String branchName(Long branchId, Map<Long, String> cache) {
+        if (branchId == null) {
+            return null;
+        }
+        if (cache != null) {
+            return cache.get(branchId);
+        }
+        return branchRepository.findById(branchId).map(Branch::getName).orElse(null);
+    }
+
+    private OrderDtos.OrderResponse toDto(ShopOrder order, Map<Long, String> branchNames) {
+        long amountPaid = paymentRepository.findByOrderIdOrderByCreatedAtDesc(order.getId()).stream()
+                .filter(p -> p.getStatus() == PaymentStatus.COMPLETED)
+                .mapToLong(Payment::getAmountPaisa)
+                .sum();
+        long balanceDue = Math.max(0, order.getTotalPaisa() - amountPaid);
+
         return new OrderDtos.OrderResponse(
                 order.getId(),
                 order.getPublicCode(),
@@ -312,10 +376,18 @@ public class OrderService {
                 order.getStatus(),
                 order.getCurrency(),
                 order.getSubtotalPaisa(),
-                order.getShippingPaisa(),
+                order.getDiscountPaisa(),
+                order.getDispatchCostPaisa(),
                 order.getTotalPaisa(),
+                amountPaid,
+                balanceDue,
                 order.getWhatsappPhone(),
                 order.getCustomerNote(),
+                order.getCreatedBranchId(),
+                branchName(order.getCreatedBranchId(), branchNames),
+                order.getDispatchBranchId(),
+                branchName(order.getDispatchBranchId(), branchNames),
+                order.getExpectedDeliveryDate(),
                 order.getItems().stream().map(i -> new OrderDtos.OrderItemResponse(
                         i.getProductId(), i.getProductName(), i.getQuantity(), i.isCustom(),
                         i.getFabricLabel(), i.getUnitPricePaisa(), i.getLineTotalPaisa()

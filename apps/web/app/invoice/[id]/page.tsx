@@ -47,13 +47,24 @@ type InvoiceItem = {
 type Invoice = {
   business: { name: string; address?: string; phone?: string; email?: string };
   customer: { fullName?: string; phone?: string; email?: string; shippingAddress?: InvoiceAddress };
-  order: { orderNumber: string; orderType: string; status: string; orderDate: string };
+  order: {
+    orderNumber: string;
+    orderType: string;
+    status: string;
+    orderDate: string;
+    createdBranchName?: string;
+    dispatchBranchName?: string;
+    expectedDeliveryDate?: string;
+  };
   items: InvoiceItem[];
   totals: {
     currency: string;
     subtotalPaisa: number;
-    shippingPaisa: number;
+    discountPaisa: number;
+    dispatchCostPaisa: number;
     totalPaisa: number;
+    previousPaidPaisa: number;
+    currentPaymentPaisa: number;
     amountPaidPaisa: number;
     balanceDuePaisa: number;
   };
@@ -167,6 +178,9 @@ export default function InvoicePage() {
           <div className="invoice-block">
             <h3>Order Details</h3>
             <p>Type: {invoice.order.orderType === "CUSTOM" ? "Made to measure" : "Ready-made"}</p>
+            {invoice.order.createdBranchName && <p>Created at: {invoice.order.createdBranchName}</p>}
+            {invoice.order.dispatchBranchName && <p>Dispatch/Pickup: {invoice.order.dispatchBranchName}</p>}
+            {invoice.order.expectedDeliveryDate && <p>Expected delivery: {invoice.order.expectedDeliveryDate}</p>}
           </div>
         </div>
 
@@ -205,22 +219,40 @@ export default function InvoicePage() {
                 <td>Subtotal</td>
                 <td>{formatPkr(invoice.totals.subtotalPaisa)}</td>
               </tr>
-              {invoice.totals.shippingPaisa > 0 && (
+              {invoice.totals.discountPaisa > 0 && (
                 <tr>
-                  <td>Shipping</td>
-                  <td>{formatPkr(invoice.totals.shippingPaisa)}</td>
+                  <td>Discount</td>
+                  <td>-{formatPkr(invoice.totals.discountPaisa)}</td>
+                </tr>
+              )}
+              {invoice.totals.dispatchCostPaisa > 0 && (
+                <tr>
+                  <td>Dispatch</td>
+                  <td>{formatPkr(invoice.totals.dispatchCostPaisa)}</td>
                 </tr>
               )}
               <tr className="invoice-grand-total">
-                <td>Total</td>
+                <td>Grand Total</td>
                 <td>{formatPkr(invoice.totals.totalPaisa)}</td>
               </tr>
+              {invoice.totals.previousPaidPaisa > 0 && (
+                <tr>
+                  <td>Previous Paid</td>
+                  <td>{formatPkr(invoice.totals.previousPaidPaisa)}</td>
+                </tr>
+              )}
+              {invoice.totals.currentPaymentPaisa > 0 && (
+                <tr>
+                  <td>Current Payment</td>
+                  <td>{formatPkr(invoice.totals.currentPaymentPaisa)}</td>
+                </tr>
+              )}
               <tr>
-                <td>Amount Paid</td>
+                <td>Total Paid</td>
                 <td>{formatPkr(invoice.totals.amountPaidPaisa)}</td>
               </tr>
               <tr className="invoice-balance-due">
-                <td>Balance Due</td>
+                <td>Remaining Balance</td>
                 <td>{formatPkr(invoice.totals.balanceDuePaisa)}</td>
               </tr>
             </tbody>

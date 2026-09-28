@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 public class OrderDtos {
@@ -49,10 +50,18 @@ public class OrderDtos {
             OrderStatus status,
             String currency,
             Long subtotalPaisa,
-            Long shippingPaisa,
+            Long discountPaisa,
+            Long dispatchCostPaisa,
             Long totalPaisa,
+            Long amountPaidPaisa,
+            Long balanceDuePaisa,
             String whatsappPhone,
             String customerNote,
+            Long createdBranchId,
+            String createdBranchName,
+            Long dispatchBranchId,
+            String dispatchBranchName,
+            LocalDate expectedDeliveryDate,
             List<OrderItemResponse> items,
             List<StatusHistoryResponse> timeline,
             Instant createdAt

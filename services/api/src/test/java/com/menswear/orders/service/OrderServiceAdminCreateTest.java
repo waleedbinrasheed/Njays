@@ -1,6 +1,7 @@
 package com.menswear.orders.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.menswear.branch.repo.BranchRepository;
 import com.menswear.cart.service.CartService;
 import com.menswear.catalog.entity.FabricColor;
 import com.menswear.catalog.entity.FabricTier;
@@ -9,6 +10,7 @@ import com.menswear.catalog.repo.FabricColorRepository;
 import com.menswear.catalog.repo.ProductRepository;
 import com.menswear.common.enums.OrderStatus;
 import com.menswear.common.enums.OrderType;
+import com.menswear.common.enums.PaymentMethod;
 import com.menswear.common.exception.BadRequestException;
 import com.menswear.common.exception.NotFoundException;
 import com.menswear.measurements.entity.MeasurementProfile;
@@ -17,6 +19,7 @@ import com.menswear.orders.dto.AdminOrderDtos;
 import com.menswear.orders.dto.OrderDtos;
 import com.menswear.orders.entity.ShopOrder;
 import com.menswear.orders.repo.OrderRepository;
+import com.menswear.payments.repo.PaymentRepository;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -35,18 +38,29 @@ class OrderServiceAdminCreateTest {
     private final ProductRepository productRepository = mock(ProductRepository.class);
     private final FabricColorRepository fabricColorRepository = mock(FabricColorRepository.class);
     private final MeasurementProfileRepository measurementProfileRepository = mock(MeasurementProfileRepository.class);
+    private final BranchRepository branchRepository = mock(BranchRepository.class);
+    private final PaymentRepository paymentRepository = mock(PaymentRepository.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     private final OrderService service = new OrderService(
             orderRepository, cartService, productRepository, fabricColorRepository,
-            measurementProfileRepository, objectMapper
+            measurementProfileRepository, branchRepository, paymentRepository, objectMapper
     );
 
     private static final Long CUSTOMER_ID = 9L;
     private static final Long ADMIN_ID = 1L;
+    private static final Long DISPATCH_BRANCH_ID = 1L;
 
     private OrderDtos.AddressDto address() {
         return new OrderDtos.AddressDto("Shop counter", null, "Karachi", "Sindh", "75500", "PK");
+    }
+
+    private AdminOrderDtos.InitialPaymentRequest noPaymentYet() {
+        return new AdminOrderDtos.InitialPaymentRequest(PaymentMethod.CASH, 0L);
+    }
+
+    private OrderDtos.OrderResponse createForCustomer(AdminOrderDtos.CreateOrderRequest request) {
+        return service.createForCustomer(CUSTOMER_ID, request, ADMIN_ID, null, 0L);
     }
 
     private Product readyMadeProduct() {
@@ -69,9 +83,12 @@ class OrderServiceAdminCreateTest {
         });
 
         var item = new AdminOrderDtos.CreateOrderItemRequest(1L, 2, false, null, null);
-        var request = new AdminOrderDtos.CreateOrderRequest(CUSTOMER_ID, address(), "03001234567", null, List.of(item));
+        var request = new AdminOrderDtos.CreateOrderRequest(
+                CUSTOMER_ID, address(), "03001234567", null,
+                null, DISPATCH_BRANCH_ID, 0L, null, noPaymentYet(), List.of(item)
+        );
 
-        OrderDtos.OrderResponse result = service.createForCustomer(CUSTOMER_ID, request, ADMIN_ID);
+        OrderDtos.OrderResponse result = createForCustomer(request);
 
         assertThat(result.orderType()).isEqualTo(OrderType.READY);
         assertThat(result.status()).isEqualTo(OrderStatus.PAYMENT_PENDING);
@@ -95,9 +112,12 @@ class OrderServiceAdminCreateTest {
         });
 
         var item = new AdminOrderDtos.CreateOrderItemRequest(2L, 1, true, 1L, 5L);
-        var request = new AdminOrderDtos.CreateOrderRequest(CUSTOMER_ID, address(), "03001234567", null, List.of(item));
+        var request = new AdminOrderDtos.CreateOrderRequest(
+                CUSTOMER_ID, address(), "03001234567", null,
+                null, DISPATCH_BRANCH_ID, 0L, null, noPaymentYet(), List.of(item)
+        );
 
-        OrderDtos.OrderResponse result = service.createForCustomer(CUSTOMER_ID, request, ADMIN_ID);
+        OrderDtos.OrderResponse result = createForCustomer(request);
 
         assertThat(result.orderType()).isEqualTo(OrderType.CUSTOM);
         assertThat(result.status()).isEqualTo(OrderStatus.PAYMENT_PENDING);
@@ -115,9 +135,12 @@ class OrderServiceAdminCreateTest {
         when(measurementProfileRepository.findByIdAndUserId(5L, CUSTOMER_ID)).thenReturn(Optional.empty());
 
         var item = new AdminOrderDtos.CreateOrderItemRequest(2L, 1, true, 1L, 5L);
-        var request = new AdminOrderDtos.CreateOrderRequest(CUSTOMER_ID, address(), "03001234567", null, List.of(item));
+        var request = new AdminOrderDtos.CreateOrderRequest(
+                CUSTOMER_ID, address(), "03001234567", null,
+                null, DISPATCH_BRANCH_ID, 0L, null, noPaymentYet(), List.of(item)
+        );
 
-        assertThatThrownBy(() -> service.createForCustomer(CUSTOMER_ID, request, ADMIN_ID))
+        assertThatThrownBy(() -> createForCustomer(request))
                 .isInstanceOf(NotFoundException.class);
     }
 
@@ -126,9 +149,12 @@ class OrderServiceAdminCreateTest {
         when(productRepository.findById(1L)).thenReturn(Optional.of(readyMadeProduct()));
 
         var item = new AdminOrderDtos.CreateOrderItemRequest(1L, 1, true, 1L, 5L);
-        var request = new AdminOrderDtos.CreateOrderRequest(CUSTOMER_ID, address(), "03001234567", null, List.of(item));
+        var request = new AdminOrderDtos.CreateOrderRequest(
+                CUSTOMER_ID, address(), "03001234567", null,
+                null, DISPATCH_BRANCH_ID, 0L, null, noPaymentYet(), List.of(item)
+        );
 
-        assertThatThrownBy(() -> service.createForCustomer(CUSTOMER_ID, request, ADMIN_ID))
+        assertThatThrownBy(() -> createForCustomer(request))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("does not support custom");
     }
@@ -138,9 +164,12 @@ class OrderServiceAdminCreateTest {
         when(productRepository.findById(2L)).thenReturn(Optional.of(customCapableProduct()));
 
         var item = new AdminOrderDtos.CreateOrderItemRequest(2L, 1, true, null, null);
-        var request = new AdminOrderDtos.CreateOrderRequest(CUSTOMER_ID, address(), "03001234567", null, List.of(item));
+        var request = new AdminOrderDtos.CreateOrderRequest(
+                CUSTOMER_ID, address(), "03001234567", null,
+                null, DISPATCH_BRANCH_ID, 0L, null, noPaymentYet(), List.of(item)
+        );
 
-        assertThatThrownBy(() -> service.createForCustomer(CUSTOMER_ID, request, ADMIN_ID))
+        assertThatThrownBy(() -> createForCustomer(request))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("require a fabric color and a measurement profile");
     }
@@ -152,9 +181,12 @@ class OrderServiceAdminCreateTest {
         when(productRepository.findById(3L)).thenReturn(Optional.of(inactive));
 
         var item = new AdminOrderDtos.CreateOrderItemRequest(3L, 1, false, null, null);
-        var request = new AdminOrderDtos.CreateOrderRequest(CUSTOMER_ID, address(), "03001234567", null, List.of(item));
+        var request = new AdminOrderDtos.CreateOrderRequest(
+                CUSTOMER_ID, address(), "03001234567", null,
+                null, DISPATCH_BRANCH_ID, 0L, null, noPaymentYet(), List.of(item)
+        );
 
-        assertThatThrownBy(() -> service.createForCustomer(CUSTOMER_ID, request, ADMIN_ID))
+        assertThatThrownBy(() -> createForCustomer(request))
                 .isInstanceOf(NotFoundException.class);
     }
 }

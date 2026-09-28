@@ -29,7 +29,10 @@ public class InvoiceDtos {
             String orderNumber,
             OrderType orderType,
             OrderStatus status,
-            Instant orderDate
+            Instant orderDate,
+            String createdBranchName,
+            String dispatchBranchName,
+            java.time.LocalDate expectedDeliveryDate
     ) {}
 
     /**
@@ -71,8 +74,11 @@ public class InvoiceDtos {
     public record Totals(
             String currency,
             long subtotalPaisa,
-            long shippingPaisa,
+            long discountPaisa,
+            long dispatchCostPaisa,
             long totalPaisa,
+            long previousPaidPaisa,
+            long currentPaymentPaisa,
             long amountPaidPaisa,
             long balanceDuePaisa
     ) {}

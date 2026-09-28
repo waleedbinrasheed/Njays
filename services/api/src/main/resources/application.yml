@@ -69,6 +69,9 @@ menswear:
       sandbox: ${JAZZCASH_SANDBOX:true}
       require-secure-hash: ${JAZZCASH_REQUIRE_HASH:true}
   currency: PKR
+  dispatch:
+    # Used when no specific source->destination branch rule exists (see DispatchCostRule).
+    default-cost-paisa: ${DEFAULT_DISPATCH_COST_PAISA:0}
 
 springdoc:
   api-docs:

@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -42,8 +43,12 @@ public class ShopOrder {
     @Column(name = "subtotal_paisa", nullable = false)
     private Long subtotalPaisa;
 
-    @Column(name = "shipping_paisa", nullable = false)
-    private Long shippingPaisa;
+    @Column(name = "discount_paisa", nullable = false)
+    private Long discountPaisa;
+
+    /** Snapshotted at order creation — later dispatch-cost config changes don't affect existing orders. */
+    @Column(name = "dispatch_cost_paisa", nullable = false)
+    private Long dispatchCostPaisa;
 
     @Column(name = "total_paisa", nullable = false)
     private Long totalPaisa;
@@ -56,6 +61,17 @@ public class ShopOrder {
 
     @Column(name = "customer_note", columnDefinition = "TEXT")
     private String customerNote;
+
+    /** Where the order was placed. Null for orders predating the branch concept. */
+    @Column(name = "created_branch_id")
+    private Long createdBranchId;
+
+    /** Where the order will be dispatched/collected from. Null for orders predating the branch concept. */
+    @Column(name = "dispatch_branch_id")
+    private Long dispatchBranchId;
+
+    @Column(name = "expected_delivery_date")
+    private LocalDate expectedDeliveryDate;
 
     /** Set only for orders backfilled from the legacy ledger import; null otherwise. */
     @Column(name = "legacy_ref", unique = true)
@@ -84,8 +100,11 @@ public class ShopOrder {
         if (currency == null) {
             currency = "PKR";
         }
-        if (shippingPaisa == null) {
-            shippingPaisa = 0L;
+        if (dispatchCostPaisa == null) {
+            dispatchCostPaisa = 0L;
+        }
+        if (discountPaisa == null) {
+            discountPaisa = 0L;
         }
     }
 

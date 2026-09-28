@@ -55,4 +55,8 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update Payment p set p.createdAt = :date, p.updatedAt = :date, p.confirmedAt = :date where p.id = :id")
     void backdate(@Param("id") Long id, @Param("date") Instant date);
+
+    @Query("select coalesce(sum(p.amountPaisa), 0) from Payment p "
+            + "where p.status = com.menswear.common.enums.PaymentStatus.COMPLETED and p.confirmedAt >= :since")
+    long sumCompletedSince(@Param("since") Instant since);
 }

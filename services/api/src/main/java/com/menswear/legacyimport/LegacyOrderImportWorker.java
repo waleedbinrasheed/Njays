@@ -158,7 +158,7 @@ public class LegacyOrderImportWorker {
                 .orderType(OrderType.CUSTOM)
                 .status(OrderStatus.PAYMENT_PENDING)
                 .currency("PKR")
-                .shippingPaisa(0L)
+                .dispatchCostPaisa(0L)
                 .shippingAddressJson("{\"line1\":\"" + escape(req.branch() != null ? req.branch() : "Turbat branch") + "\",\"city\":\"Turbat\",\"country\":\"PK\"}")
                 .whatsappPhone(AuthService.normalizePhone(req.rawPhone()))
                 .customerNote(buildNote(req))

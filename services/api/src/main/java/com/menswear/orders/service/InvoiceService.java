@@ -1,6 +1,8 @@
 package com.menswear.orders.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.menswear.branch.entity.Branch;
+import com.menswear.branch.repo.BranchRepository;
 import com.menswear.common.enums.PaymentStatus;
 import com.menswear.common.exception.NotFoundException;
 import com.menswear.config.MenswearProperties;
@@ -25,6 +27,7 @@ public class InvoiceService {
     private final OrderRepository orderRepository;
     private final UserRepository userRepository;
     private final PaymentRepository paymentRepository;
+    private final BranchRepository branchRepository;
     private final MenswearProperties properties;
     private final ObjectMapper objectMapper;
 
@@ -32,12 +35,14 @@ public class InvoiceService {
             OrderRepository orderRepository,
             UserRepository userRepository,
             PaymentRepository paymentRepository,
+            BranchRepository branchRepository,
             MenswearProperties properties,
             ObjectMapper objectMapper
     ) {
         this.orderRepository = orderRepository;
         this.userRepository = userRepository;
         this.paymentRepository = paymentRepository;
+        this.branchRepository = branchRepository;
         this.properties = properties;
         this.objectMapper = objectMapper;
     }
@@ -77,24 +82,35 @@ public class InvoiceService {
                 order.getPublicCode(),
                 order.getOrderType(),
                 order.getStatus(),
-                order.getCreatedAt()
+                order.getCreatedAt(),
+                branchName(order.getCreatedBranchId()),
+                branchName(order.getDispatchBranchId()),
+                order.getExpectedDeliveryDate()
         );
 
         List<InvoiceDtos.InvoiceItem> items = order.getItems().stream()
                 .map(this::toInvoiceItem)
                 .toList();
 
-        long amountPaid = paymentRepository.findByOrderIdOrderByCreatedAtDesc(order.getId()).stream()
+        // Completed payments, most recent first — the most recent one is "current payment"
+        // (relevant when this invoice is printed right after taking a payment); everything
+        // before it is "previously paid".
+        List<Payment> completed = paymentRepository.findByOrderIdOrderByCreatedAtDesc(order.getId()).stream()
                 .filter(p -> p.getStatus() == PaymentStatus.COMPLETED)
-                .mapToLong(Payment::getAmountPaisa)
-                .sum();
+                .toList();
+        long currentPayment = completed.isEmpty() ? 0 : completed.get(0).getAmountPaisa();
+        long previousPaid = completed.stream().skip(1).mapToLong(Payment::getAmountPaisa).sum();
+        long amountPaid = currentPayment + previousPaid;
         long balanceDue = Math.max(0, order.getTotalPaisa() - amountPaid);
 
         InvoiceDtos.Totals totals = new InvoiceDtos.Totals(
                 order.getCurrency(),
                 order.getSubtotalPaisa(),
-                order.getShippingPaisa(),
+                order.getDiscountPaisa(),
+                order.getDispatchCostPaisa(),
                 order.getTotalPaisa(),
+                previousPaid,
+                currentPayment,
                 amountPaid,
                 balanceDue
         );
@@ -134,6 +150,13 @@ public class InvoiceService {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private String branchName(Long branchId) {
+        if (branchId == null) {
+            return null;
+        }
+        return branchRepository.findById(branchId).map(Branch::getName).orElse(null);
     }
 
     private static String blankToNull(String value) {

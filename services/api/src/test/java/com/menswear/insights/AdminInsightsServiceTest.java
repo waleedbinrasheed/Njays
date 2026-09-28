@@ -43,7 +43,7 @@ class AdminInsightsServiceTest {
                 .status(status)
                 .currency("PKR")
                 .subtotalPaisa(500000L)
-                .shippingPaisa(0L)
+                .dispatchCostPaisa(0L)
                 .totalPaisa(500000L)
                 .shippingAddressJson("{}")
                 .whatsappPhone("+923001234567")

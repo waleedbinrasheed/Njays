@@ -26,6 +26,11 @@ public class AdminCustomerController {
         return adminCustomerService.search(query);
     }
 
+    @GetMapping("/{id}/detail")
+    public AdminCustomerDtos.CustomerDetailResponse detail(@PathVariable Long id) {
+        return adminCustomerService.detail(id);
+    }
+
     @PostMapping
     public AdminCustomerDtos.CustomerSummary create(@Valid @RequestBody AdminCustomerDtos.CreateWalkInRequest request) {
         return adminCustomerService.createWalkIn(request);

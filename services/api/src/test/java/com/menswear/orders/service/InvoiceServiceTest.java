@@ -2,6 +2,7 @@ package com.menswear.orders.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.menswear.branch.repo.BranchRepository;
 import com.menswear.common.enums.OrderStatus;
 import com.menswear.common.enums.OrderType;
 import com.menswear.common.enums.PaymentMethod;
@@ -41,6 +42,7 @@ class InvoiceServiceTest {
     private final OrderRepository orderRepository = mock(OrderRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final PaymentRepository paymentRepository = mock(PaymentRepository.class);
+    private final BranchRepository branchRepository = mock(BranchRepository.class);
     private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
     private final MenswearProperties properties = new MenswearProperties(
             new MenswearProperties.Jwt("secret", 120, 14),
@@ -56,7 +58,7 @@ class InvoiceServiceTest {
     );
 
     private final InvoiceService service = new InvoiceService(
-            orderRepository, userRepository, paymentRepository, properties, objectMapper
+            orderRepository, userRepository, paymentRepository, branchRepository, properties, objectMapper
     );
 
     private User sampleUser() {
@@ -75,7 +77,8 @@ class InvoiceServiceTest {
                 .status(OrderStatus.IN_STITCHING)
                 .currency("PKR")
                 .subtotalPaisa(1000000L)
-                .shippingPaisa(50000L)
+                .discountPaisa(0L)
+                .dispatchCostPaisa(50000L)
                 .totalPaisa(1050000L)
                 .shippingAddressJson(addressJson)
                 .whatsappPhone("923005556666")
@@ -170,7 +173,7 @@ class InvoiceServiceTest {
         assertThat(response.totals().balanceDuePaisa()).isEqualTo(350000L); // 1,050,000 - 700,000
         assertThat(response.totals().totalPaisa()).isEqualTo(1050000L);
         assertThat(response.totals().subtotalPaisa()).isEqualTo(1000000L);
-        assertThat(response.totals().shippingPaisa()).isEqualTo(50000L);
+        assertThat(response.totals().dispatchCostPaisa()).isEqualTo(50000L);
     }
 
     @Test

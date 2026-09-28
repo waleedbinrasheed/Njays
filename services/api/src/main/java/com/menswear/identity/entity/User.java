@@ -31,6 +31,10 @@ public class User {
 
     private String phone;
 
+    /** Staff's home branch (used to auto-fill "created at branch" on in-shop orders). Not set for customers. */
+    @Column(name = "branch_id")
+    private Long branchId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Role role;

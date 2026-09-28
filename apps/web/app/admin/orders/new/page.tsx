@@ -1,8 +1,17 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { api, formatPkr, type FabricTier, type Measurement, type Product } from "@/lib/api";
+import { useSearchParams } from "next/navigation";
+import {
+  api,
+  formatPkr,
+  type Branch,
+  type Category,
+  type FabricTier,
+  type Measurement,
+  type Product,
+} from "@/lib/api";
 import { AdminNav } from "@/components/AdminNav";
 
 type CustomerSummary = { id: number; fullName: string; phone?: string; email?: string };
@@ -25,8 +34,18 @@ const SLEEVE_OPTIONS = ["PLAIN", "CUT"];
 const BUTTON_OPTIONS = ["SAME", "CONTRAST", "BRASS"];
 const COLLAR_OPTIONS = ["BAN", "HALF_BAN", "FULL_BAN", "MANDARIN"];
 const CUFF_OPTIONS = ["ROUND", "CUT"];
+const PAYMENT_METHODS = ["CASH", "BANK_TRANSFER", "COD"];
 
 export default function AdminCreateOrderPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminCreateOrderPageInner />
+    </Suspense>
+  );
+}
+
+function AdminCreateOrderPageInner() {
+  const searchParams = useSearchParams();
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -42,16 +61,28 @@ export default function AdminCreateOrderPage() {
   const [selectedProfileId, setSelectedProfileId] = useState<number | "">("");
   const [showNewMeasurement, setShowNewMeasurement] = useState(false);
 
-  // Step 3 — catalog + item builder
+  // Step 3 — branch
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [createdBranchId, setCreatedBranchId] = useState<number | "">("");
+  const [dispatchBranchId, setDispatchBranchId] = useState<number | "">("");
+  const [dispatchCostPaisa, setDispatchCostPaisa] = useState(0);
+
+  // Step 4 — garment / design / fabric + item builder
+  const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [fabrics, setFabrics] = useState<FabricTier[]>([]);
+  const [itemCategoryId, setItemCategoryId] = useState<number | "">("");
   const [itemProductId, setItemProductId] = useState<number | "">("");
   const [itemCustom, setItemCustom] = useState(true);
+  const [fabrics, setFabrics] = useState<FabricTier[]>([]);
   const [itemFabricColorId, setItemFabricColorId] = useState<number | "">("");
   const [itemQuantity, setItemQuantity] = useState(1);
   const [cart, setCart] = useState<CartLine[]>([]);
 
-  // Step 4 — delivery + submit
+  // Step 5 — price + payment + delivery
+  const [discountPkr, setDiscountPkr] = useState("0");
+  const [paymentMethod, setPaymentMethod] = useState("CASH");
+  const [paymentAmountPkr, setPaymentAmountPkr] = useState("");
+  const [expectedDeliveryDate, setExpectedDeliveryDate] = useState("");
   const [line1, setLine1] = useState("In-store pickup");
   const [city, setCity] = useState("");
   const [whatsappPhone, setWhatsappPhone] = useState("");
@@ -59,8 +90,25 @@ export default function AdminCreateOrderPage() {
   const [successOrder, setSuccessOrder] = useState<{ id: number; publicCode: string } | null>(null);
 
   useEffect(() => {
+    api<Category[]>("/api/v1/categories").then(setCategories).catch(() => undefined);
     api<Product[]>("/api/v1/products").then(setProducts).catch(() => undefined);
     api<FabricTier[]>("/api/v1/fabrics").then(setFabrics).catch(() => undefined);
+    api<Branch[]>("/api/v1/branches").then((list) => {
+      setBranches(list);
+      if (list.length === 1) {
+        setCreatedBranchId(list[0].id);
+        setDispatchBranchId(list[0].id);
+      }
+    }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const customerId = searchParams.get("customerId");
+    if (!customerId) return;
+    api<{ id: number; fullName: string; phone?: string; email?: string }>(`/api/v1/admin/customers/${customerId}/detail`)
+      .then((d) => setSelectedCustomer({ id: d.id, fullName: d.fullName, phone: d.phone, email: d.email }))
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -77,6 +125,22 @@ export default function AdminCreateOrderPage() {
       setSelectedProfileId("");
     }
   }, [selectedCustomer]);
+
+  useEffect(() => {
+    if (!createdBranchId || !dispatchBranchId) {
+      setDispatchCostPaisa(0);
+      return;
+    }
+    if (createdBranchId === dispatchBranchId) {
+      setDispatchCostPaisa(0);
+      return;
+    }
+    api<{ costPaisa: number }>(
+      `/api/v1/admin/dispatch-costs/resolve?sourceBranchId=${createdBranchId}&destinationBranchId=${dispatchBranchId}`
+    )
+      .then((r) => setDispatchCostPaisa(r.costPaisa))
+      .catch(() => setDispatchCostPaisa(0));
+  }, [createdBranchId, dispatchBranchId]);
 
   async function searchCustomers(e: FormEvent) {
     e.preventDefault();
@@ -150,6 +214,10 @@ export default function AdminCreateOrderPage() {
     }
   }
 
+  const filteredProducts = useMemo(
+    () => (itemCategoryId ? products.filter((p) => p.categoryId === itemCategoryId) : products),
+    [products, itemCategoryId]
+  );
   const selectedProduct = useMemo(() => products.find((p) => p.id === itemProductId), [products, itemProductId]);
   const selectedFabricColor = useMemo(() => {
     for (const tier of fabrics) {
@@ -162,7 +230,7 @@ export default function AdminCreateOrderPage() {
   function addItemToCart() {
     setError("");
     if (!selectedProduct) {
-      setError("Pick a product first");
+      setError("Pick a design first");
       return;
     }
     if (itemCustom && (!selectedFabricColor || !selectedProfileId)) {
@@ -191,6 +259,12 @@ export default function AdminCreateOrderPage() {
   }
 
   const subtotal = cart.reduce((sum, l) => sum + l.lineTotalPaisa, 0);
+  const discountPaisa = Math.min(subtotal, Math.max(0, Math.round(Number(discountPkr || 0) * 100)));
+  const grandTotal = subtotal - discountPaisa + dispatchCostPaisa;
+
+  useEffect(() => {
+    setPaymentAmountPkr((grandTotal / 100).toFixed(0));
+  }, [grandTotal]);
 
   async function submitOrder() {
     setError("");
@@ -198,10 +272,15 @@ export default function AdminCreateOrderPage() {
       setError("Select or create a customer first");
       return;
     }
+    if (!dispatchBranchId) {
+      setError("Select a dispatch/pickup branch");
+      return;
+    }
     if (cart.length === 0) {
       setError("Add at least one item");
       return;
     }
+    const paymentAmountPaisa = Math.round(Number(paymentAmountPkr || 0) * 100);
     setSubmitting(true);
     try {
       const order = await api<{ id: number; publicCode: string }>("/api/v1/admin/orders", {
@@ -211,6 +290,11 @@ export default function AdminCreateOrderPage() {
           shippingAddress: { line1, city: city || "N/A", country: "PK" },
           whatsappPhone: whatsappPhone || selectedCustomer.phone,
           customerNote: note,
+          createdBranchId: createdBranchId || null,
+          dispatchBranchId,
+          discountPaisa,
+          expectedDeliveryDate: expectedDeliveryDate || null,
+          payment: { method: paymentMethod, amountPaisa: paymentAmountPaisa },
           items: cart.map((l) => ({
             productId: l.productId,
             quantity: l.quantity,
@@ -221,7 +305,7 @@ export default function AdminCreateOrderPage() {
         }),
       });
       setSuccessOrder(order);
-      setMessage(`Order ${order.publicCode} created and marked paid.`);
+      setMessage(`Order ${order.publicCode} created.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create order");
     } finally {
@@ -234,18 +318,17 @@ export default function AdminCreateOrderPage() {
       <section className="container section">
         <AdminNav />
         <div className="panel" style={{ maxWidth: 560 }}>
-          <span className="status-pill">Paid</span>
           <h3>Order {successOrder.publicCode} created</h3>
           <p className="success">{message}</p>
           <div className="form-actions">
             <Link href={`/invoice/${successOrder.id}`} className="btn btn-primary">
-              Print Invoice
+              Print Payment Slip
             </Link>
             <a href="/admin/orders/new" className="btn btn-ghost">
               New order
             </a>
             <Link href="/admin" className="btn btn-ghost">
-              Back to admin
+              Back to dashboard
             </Link>
           </div>
         </div>
@@ -257,9 +340,9 @@ export default function AdminCreateOrderPage() {
     <section className="container section">
       <AdminNav />
       <div className="page-header">
-        <span className="section-label">Studio</span>
-        <h2>Create order</h2>
-        <p className="lead">For a walk-in client at the shop — payment is recorded as cash, settled immediately.</p>
+        <span className="section-label">Orders</span>
+        <h2>New order</h2>
+        <p className="lead">For a walk-in client at the shop.</p>
       </div>
 
       {error && <div className="error">{error}</div>}
@@ -285,11 +368,11 @@ export default function AdminCreateOrderPage() {
               <>
                 <form className="form-row" onSubmit={searchCustomers} style={{ alignItems: "end" }}>
                   <label>
-                    Search by phone or name
+                    Mobile number
                     <input
                       value={customerQuery}
                       onChange={(e) => setCustomerQuery(e.target.value)}
-                      placeholder="03001234567 or Ayesha"
+                      placeholder="03001234567"
                     />
                   </label>
                   <button className="btn btn-primary">Search</button>
@@ -465,18 +548,80 @@ export default function AdminCreateOrderPage() {
             </div>
           )}
 
-          {/* Step 3: items */}
+          {/* Step 3: branch */}
           {selectedCustomer && (
             <div className="pos-step panel">
               <h3 className="pos-step-title">
-                <span className="pos-step-num">3</span> Add items
+                <span className="pos-step-num">3</span> Branch
+              </h3>
+              <div className="form-row">
+                <label>
+                  Created at
+                  <select value={createdBranchId} onChange={(e) => setCreatedBranchId(Number(e.target.value) || "")}>
+                    <option value="">Select branch</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Dispatch / pickup at
+                  <select value={dispatchBranchId} onChange={(e) => setDispatchBranchId(Number(e.target.value) || "")}>
+                    <option value="">Select branch</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              {dispatchCostPaisa > 0 && (
+                <p className="muted">Dispatch cost: {formatPkr(dispatchCostPaisa)}</p>
+              )}
+              {branches.length === 0 && (
+                <p className="muted">
+                  No branches yet — add one under{" "}
+                  <Link href="/admin/branches" className="link-subtle">
+                    Administration &gt; Branches
+                  </Link>
+                  .
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Step 4: garment / design / fabric */}
+          {selectedCustomer && (
+            <div className="pos-step panel">
+              <h3 className="pos-step-title">
+                <span className="pos-step-num">4</span> Garment, design &amp; fabric
               </h3>
               <div className="form">
                 <label>
-                  Product
+                  Garment type
+                  <select
+                    value={itemCategoryId}
+                    onChange={(e) => {
+                      setItemCategoryId(Number(e.target.value) || "");
+                      setItemProductId("");
+                    }}
+                  >
+                    <option value="">All garment types</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Design
                   <select value={itemProductId} onChange={(e) => setItemProductId(Number(e.target.value))}>
-                    <option value="">Select a product</option>
-                    {products.map((p) => (
+                    <option value="">Select a design</option>
+                    {filteredProducts.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} — {formatPkr(p.basePricePaisa)}
                       </option>
@@ -520,7 +665,7 @@ export default function AdminCreateOrderPage() {
         </div>
 
         <div>
-          {/* Order summary + step 4 */}
+          {/* Order summary + price/payment/delivery */}
           <div className="panel preview-sticky">
             <h3 style={{ marginTop: 0 }}>Order summary</h3>
             {cart.length === 0 && <p className="muted">No items added yet.</p>}
@@ -529,7 +674,7 @@ export default function AdminCreateOrderPage() {
                 <div>
                   <strong>{l.productName}</strong>
                   <div className="muted">
-                    Qty {l.quantity} · {l.custom ? l.fabricLabel || "Custom" : "Ready-made"}
+                    Qty {l.quantity} - {l.custom ? l.fabricLabel || "Custom" : "Ready-made"}
                   </div>
                 </div>
                 <div style={{ textAlign: "right" }}>
@@ -540,18 +685,76 @@ export default function AdminCreateOrderPage() {
                 </div>
               </div>
             ))}
+
             {cart.length > 0 && (
-              <div className="cart-total">
-                <strong>Total</strong>
-                <strong className="price">{formatPkr(subtotal)}</strong>
-              </div>
+              <>
+                <div className="cart-total">
+                  <span>Subtotal</span>
+                  <span>{formatPkr(subtotal)}</span>
+                </div>
+                <label>
+                  Discount (PKR)
+                  <input
+                    type="number"
+                    min={0}
+                    value={discountPkr}
+                    onChange={(e) => setDiscountPkr(e.target.value)}
+                    style={{ maxWidth: 140 }}
+                  />
+                </label>
+                {dispatchCostPaisa > 0 && (
+                  <div className="cart-total">
+                    <span>Dispatch</span>
+                    <span>{formatPkr(dispatchCostPaisa)}</span>
+                  </div>
+                )}
+                <div className="cart-total">
+                  <strong>Grand total</strong>
+                  <strong className="price">{formatPkr(grandTotal)}</strong>
+                </div>
+              </>
             )}
 
             {selectedCustomer && cart.length > 0 && (
               <div className="form" style={{ marginTop: "1.25rem" }}>
                 <h3 style={{ marginBottom: 0 }}>
                   <span className="pos-step-num" style={{ marginRight: "0.5rem" }}>
-                    4
+                    5
+                  </span>
+                  Payment
+                </h3>
+                <div className="form-row">
+                  <label>
+                    Method
+                    <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+                      {PAYMENT_METHODS.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Amount received (PKR)
+                    <input
+                      type="number"
+                      min={0}
+                      max={grandTotal / 100}
+                      value={paymentAmountPkr}
+                      onChange={(e) => setPaymentAmountPkr(e.target.value)}
+                    />
+                  </label>
+                </div>
+                {Math.round(Number(paymentAmountPkr || 0) * 100) < grandTotal && (
+                  <p className="muted">
+                    Remaining balance after this payment:{" "}
+                    {formatPkr(grandTotal - Math.round(Number(paymentAmountPkr || 0) * 100))}
+                  </p>
+                )}
+
+                <h3 style={{ marginBottom: 0 }}>
+                  <span className="pos-step-num" style={{ marginRight: "0.5rem" }}>
+                    6
                   </span>
                   Delivery
                 </h3>
@@ -568,11 +771,19 @@ export default function AdminCreateOrderPage() {
                   <input value={whatsappPhone} onChange={(e) => setWhatsappPhone(e.target.value)} />
                 </label>
                 <label>
+                  Expected delivery date
+                  <input
+                    type="date"
+                    value={expectedDeliveryDate}
+                    onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+                  />
+                </label>
+                <label>
                   Note
                   <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
                 </label>
                 <button type="button" className="btn btn-primary" disabled={submitting} onClick={submitOrder}>
-                  {submitting ? "Creating…" : `Create order — ${formatPkr(subtotal)} cash`}
+                  {submitting ? "Creating…" : `Create order — ${formatPkr(grandTotal)}`}
                 </button>
               </div>
             )}

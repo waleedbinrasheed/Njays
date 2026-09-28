@@ -2,8 +2,10 @@ package com.menswear.orders.web;
 
 import com.menswear.identity.security.SecurityUtils;
 import com.menswear.orders.dto.AdminOrderDtos;
+import com.menswear.orders.dto.DashboardDtos;
 import com.menswear.orders.dto.InvoiceDtos;
 import com.menswear.orders.dto.OrderDtos;
+import com.menswear.orders.service.AdminDashboardService;
 import com.menswear.orders.service.AdminOrderService;
 import com.menswear.orders.service.InvoiceService;
 import com.menswear.orders.service.OrderService;
@@ -19,11 +21,23 @@ public class OrderController {
     private final OrderService orderService;
     private final InvoiceService invoiceService;
     private final AdminOrderService adminOrderService;
+    private final AdminDashboardService adminDashboardService;
 
-    public OrderController(OrderService orderService, InvoiceService invoiceService, AdminOrderService adminOrderService) {
+    public OrderController(
+            OrderService orderService,
+            InvoiceService invoiceService,
+            AdminOrderService adminOrderService,
+            AdminDashboardService adminDashboardService
+    ) {
         this.orderService = orderService;
         this.invoiceService = invoiceService;
         this.adminOrderService = adminOrderService;
+        this.adminDashboardService = adminDashboardService;
+    }
+
+    @GetMapping("/admin/dashboard/summary")
+    public DashboardDtos.SummaryResponse dashboardSummary() {
+        return adminDashboardService.summary();
     }
 
     @PostMapping("/orders")
@@ -75,5 +89,18 @@ public class OrderController {
             @Valid @RequestBody OrderDtos.UpdateStatusRequest request
     ) {
         return orderService.updateStatus(id, request, SecurityUtils.currentUserId());
+    }
+
+    @PostMapping("/admin/orders/{id}/payments")
+    public OrderDtos.OrderResponse recordPayment(
+            @PathVariable Long id,
+            @Valid @RequestBody AdminOrderDtos.RecordPaymentRequest request
+    ) {
+        return adminOrderService.recordPayment(id, request);
+    }
+
+    @GetMapping("/admin/customers/{id}/orders")
+    public List<OrderDtos.OrderResponse> customerOrders(@PathVariable Long id) {
+        return orderService.adminListForCustomer(id);
     }
 }

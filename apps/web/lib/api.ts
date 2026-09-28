@@ -28,6 +28,87 @@ export type FabricTier = {
   colors: { id: number; code: string; name: string; hexColor?: string }[];
 };
 
+export type Branch = {
+  id: number;
+  name: string;
+  address?: string;
+  phone?: string;
+  active: boolean;
+};
+
+export type DispatchCostRule = {
+  id: number;
+  sourceBranchId: number;
+  sourceBranchName: string;
+  destinationBranchId: number;
+  destinationBranchName: string;
+  costPaisa: number;
+};
+
+export type DispatchCostSettings = {
+  defaultCostPaisa: number;
+  rules: DispatchCostRule[];
+};
+
+export type Category = { id: number; name: string; slug: string; description?: string };
+
+export type OrderItem = {
+  productId: number;
+  productName: string;
+  quantity: number;
+  custom: boolean;
+  fabricLabel?: string;
+  unitPricePaisa: number;
+  lineTotalPaisa: number;
+};
+
+export type StatusHistoryEntry = { fromStatus?: string; toStatus: string; note?: string; createdAt: string };
+
+export type Order = {
+  id: number;
+  publicCode: string;
+  orderType: string;
+  status: string;
+  currency: string;
+  subtotalPaisa: number;
+  discountPaisa: number;
+  dispatchCostPaisa: number;
+  totalPaisa: number;
+  amountPaidPaisa: number;
+  balanceDuePaisa: number;
+  whatsappPhone?: string;
+  customerNote?: string;
+  createdBranchId?: number;
+  createdBranchName?: string;
+  dispatchBranchId?: number;
+  dispatchBranchName?: string;
+  expectedDeliveryDate?: string;
+  items: OrderItem[];
+  timeline: StatusHistoryEntry[];
+  createdAt: string;
+};
+
+export type CustomerDetail = {
+  id: number;
+  fullName: string;
+  phone?: string;
+  email?: string;
+  measurements: Measurement[];
+  orders: Order[];
+  outstandingBalancePaisa: number;
+};
+
+export type DashboardSummary = {
+  todaysOrders: number;
+  ordersInProgress: number;
+  readyForDelivery: number;
+  ordersDueToday: number;
+  overdueOrders: number;
+  todaysPaymentsPaisa: number;
+  outstandingPayments: number;
+  awaitingDispatch: number;
+};
+
 export type Measurement = {
   id: number;
   name: string;

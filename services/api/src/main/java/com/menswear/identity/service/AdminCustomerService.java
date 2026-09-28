@@ -2,9 +2,13 @@ package com.menswear.identity.service;
 
 import com.menswear.common.enums.Role;
 import com.menswear.common.exception.BadRequestException;
+import com.menswear.common.exception.NotFoundException;
 import com.menswear.identity.dto.AdminCustomerDtos;
 import com.menswear.identity.entity.User;
 import com.menswear.identity.repo.UserRepository;
+import com.menswear.measurements.service.MeasurementService;
+import com.menswear.orders.dto.OrderDtos;
+import com.menswear.orders.service.OrderService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,10 +27,37 @@ public class AdminCustomerService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final MeasurementService measurementService;
+    private final OrderService orderService;
 
-    public AdminCustomerService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public AdminCustomerService(
+            UserRepository userRepository,
+            PasswordEncoder passwordEncoder,
+            MeasurementService measurementService,
+            OrderService orderService
+    ) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.measurementService = measurementService;
+        this.orderService = orderService;
+    }
+
+    /** Combined lookup for the admin "Search Customer" screen: profile + latest measurements + order history + balance. */
+    @Transactional(readOnly = true)
+    public AdminCustomerDtos.CustomerDetailResponse detail(Long customerId) {
+        User user = userRepository.findById(customerId)
+                .orElseThrow(() -> new NotFoundException("Customer not found"));
+        List<OrderDtos.OrderResponse> orders = orderService.adminListForCustomer(customerId);
+        long outstanding = orders.stream().mapToLong(OrderDtos.OrderResponse::balanceDuePaisa).sum();
+        return new AdminCustomerDtos.CustomerDetailResponse(
+                user.getId(),
+                user.getFullName(),
+                user.getPhone(),
+                user.getEmail(),
+                measurementService.listForUser(customerId),
+                orders,
+                outstanding
+        );
     }
 
     @Transactional(readOnly = true)
